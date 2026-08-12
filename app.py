@@ -18,9 +18,19 @@ st.set_page_config(
 HR_EMAIL = "tarang@thegermanemedia.com"
 GOOGLE_CHAT_LINK = "https://chat.google.com/"
 
-# --- STYLING ---
+# --- CUSTOM CSS (SIDEBAR LOGO & STICKY RIGHT COLUMN) ---
 st.markdown("""
 <style>
+    /* Prevent long chat history from pushing down right sidebar elements */
+    [data-testid="stColumn"]:nth-child(2) {
+        position: sticky;
+        top: 2rem;
+        align-self: flex-start;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    /* Source citation box styling */
     .source-box {
         background-color: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -29,6 +39,8 @@ st.markdown("""
         font-size: 13px;
         margin-top: 8px;
     }
+    
+    /* Privacy badge styling */
     .badge-safe {
         background-color: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -37,6 +49,7 @@ st.markdown("""
         text-align: left;
         margin-top: 20px;
     }
+    
     .stButton>button {
         border-radius: 8px;
         font-weight: 500;
@@ -117,12 +130,18 @@ def send_transcript_email(employee_email, employee_name, chat_history):
 
 # --- SESSION STATE INITIALIZATION FOR BOOKINGS ---
 if "booked_slots" not in st.session_state:
-    # Key format: 'YYYY-MM-DD HH:MM'
     st.session_state.booked_slots = set()
 
 # --- SIDEBAR COMPONENT ---
 with st.sidebar:
-    st.markdown("## 🏢 **GERMANE MEDIA LLC**")
+    # --- GERMANE MEDIA LOGO ---
+    # You can upload a file named 'logo.png' to your GitHub repo root, 
+    # or paste your hosted image URL inside st.image below:
+    try:
+        st.image("logo.png", use_container_width=True)
+    except Exception:
+        st.title("🏢 GERMANE MEDIA LLC")
+        
     st.caption("*Psychology of Advertising*")
     st.divider()
     
@@ -163,7 +182,7 @@ if not st.session_state.user_authenticated:
             st.error("Please enter a valid name and email address.")
     st.stop()
 
-# --- MAIN CHAT INTERFACE ---
+# --- MAIN LAYOUT ---
 col_main, col_right = st.columns([3, 1])
 
 with col_main:
@@ -231,7 +250,7 @@ with col_main:
     # Email Transcript Section
     if st.button(f"📧 Send Chat Transcript to My Email ({st.session_state.emp_email})"):
         if "SMTP_USER" not in st.secrets or "SMTP_PASSWORD" not in st.secrets:
-            st.warning("⚠️ Email credentials are not configured in Streamlit Secrets yet. Please add SMTP_USER and SMTP_PASSWORD to your secrets.")
+            st.warning("⚠️ Email credentials are not configured in Streamlit Secrets yet.")
         else:
             with st.spinner("Sending email..."):
                 if send_transcript_email(st.session_state.emp_email, st.session_state.emp_name, st.session_state.messages):
@@ -239,7 +258,7 @@ with col_main:
                 else:
                     st.error("Failed to send email. Please verify your Gmail App Password setup in Streamlit Secrets.")
 
-# --- RIGHT SIDEBAR ---
+# --- RIGHT SIDEBAR (STICKY PANEL) ---
 with col_right:
     st.markdown(f"**👤 {st.session_state.emp_name}**")
     st.caption(st.session_state.emp_email)
@@ -262,13 +281,11 @@ with col_right:
     
     selected_date = st.date_input("Select Date", min_value=date.today())
     
-    # Standard working hours slots (15-min intervals)
     all_slots = [
         "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
         "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM"
     ]
     
-    # Filter out slots that are already booked for the selected date
     available_slots = [
         slot for slot in all_slots 
         if f"{selected_date}_{slot}" not in st.session_state.booked_slots
