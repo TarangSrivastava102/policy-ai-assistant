@@ -1,12 +1,10 @@
 import streamlit as st
 from google import genai
 from pypdf import PdfReader
-
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from email.message import EmailMessage
 from html import escape
-from datetime import datetime
+from pathlib import Path
 
 
 # ============================================================
@@ -33,10 +31,16 @@ HR_BOOKING_URL = (
     "https://calendar.app.google/wjkBcfyeAgKqCRUVA"
 )
 
-# Google Chat HR
+# Direct Google Chat with HR
 DIRECT_GOOGLE_CHAT_HR = (
     "https://chat.google.com/dm/tarang@thegermanemedia.com"
 )
+
+# Policy PDF
+POLICY_PDF = "GERMANE_MEDIA_LLC_POLICY_DOCUMENT.pdf"
+
+# Gemini model
+GEMINI_MODEL = "gemini-3.6-flash"
 
 
 # ============================================================
@@ -58,12 +62,8 @@ st.markdown(
             sans-serif;
         }
 
-        [data-testid="stColumn"]:nth-child(2) {
-            position: sticky;
-            top: 2rem;
-            align-self: flex-start;
-            max-height: 92vh;
-            overflow-y: auto;
+        [data-testid="stColumn"] {
+            border-radius: 10px;
         }
 
         .brand-title {
@@ -82,7 +82,7 @@ st.markdown(
         .privacy-notice {
             background-color: #f1f5f9;
             border-radius: 8px;
-            padding: 10px 14px;
+            padding: 12px 14px;
             font-size: 12px;
             color: #475569;
             border: 1px solid #e2e8f0;
@@ -96,6 +96,16 @@ st.markdown(
             padding: 14px;
             margin-top: 10px;
             color: #991b1b;
+            font-size: 13px;
+        }
+
+        .success-box {
+            background-color: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 10px;
+            color: #065f46;
             font-size: 13px;
         }
 
@@ -139,14 +149,35 @@ st.markdown(
 
 
 # ============================================================
+# CHECK POLICY PDF
+# ============================================================
+
+if not Path(POLICY_PDF).exists():
+
+    st.error(
+        f"Policy PDF not found: {POLICY_PDF}"
+    )
+
+    st.info(
+        "Make sure the PDF is uploaded in the same directory "
+        "as app.py."
+    )
+
+    st.stop()
+
+
+# ============================================================
 # GEMINI API
 # ============================================================
 
 if "GEMINI_API_KEY" not in st.secrets:
 
     st.error(
-        "Gemini API key is not configured. "
-        "Please contact the administrator."
+        "Gemini API key is not configured."
+    )
+
+    st.info(
+        "Please add GEMINI_API_KEY to Streamlit Secrets."
     )
 
     st.stop()
@@ -158,14 +189,162 @@ try:
         api_key=st.secrets["GEMINI_API_KEY"]
     )
 
-except Exception:
+except Exception as e:
 
     st.error(
-        "Unable to initialize the Gemini AI service. "
-        "Please contact the administrator."
+        "Unable to initialize the Gemini AI service."
     )
 
+    st.error(str(e))
+
     st.stop()
+
+
+# ============================================================
+# SMTP CONFIGURATION
+# ============================================================
+
+def smtp_is_configured():
+
+    return (
+        "SMTP_EMAIL" in st.secrets
+        and "SMTP_PASSWORD" in st.secrets
+        and str(st.secrets["SMTP_EMAIL"]).strip() != ""
+        and str(st.secrets["SMTP_PASSWORD"]).strip() != ""
+    )
+
+
+# ============================================================
+# SEND EMAIL TO HR
+# ============================================================
+
+def send_hr_email(
+    employee_name,
+    employee_email,
+    conversation
+):
+
+    if not smtp_is_configured():
+
+        raise Exception(
+            "Email service is not configured. "
+            "Please check SMTP_EMAIL and SMTP_PASSWORD "
+            "in Streamlit Secrets."
+        )
+
+    smtp_email = str(
+        st.secrets["SMTP_EMAIL"]
+    ).strip()
+
+    smtp_password = str(
+        st.secrets["SMTP_PASSWORD"]
+    ).strip()
+
+    smtp_host = str(
+        st.secrets.get(
+            "SMTP_HOST",
+            "smtp.gmail.com"
+        )
+    ).strip()
+
+    smtp_port = int(
+        st.secrets.get(
+            "SMTP_PORT",
+            587
+        )
+    )
+
+    # --------------------------------------------------------
+    # Build conversation transcript
+    # --------------------------------------------------------
+
+    transcript_lines = []
+
+    for message in conversation:
+
+        role = (
+            "EMPLOYEE"
+            if message["role"] == "user"
+            else "GM POLICY ASSISTANT"
+        )
+
+        transcript_lines.append(
+            f"{role}:\n{message['content']}\n"
+        )
+
+    transcript = "\n".join(
+        transcript_lines
+    )
+
+    # --------------------------------------------------------
+    # Email
+    # --------------------------------------------------------
+
+    msg = EmailMessage()
+
+    msg["Subject"] = (
+        f"HR Assistance Required - "
+        f"{employee_name}"
+    )
+
+    msg["From"] = smtp_email
+    msg["To"] = HR_EMAIL
+    msg["Reply-To"] = employee_email
+
+    msg.set_content(
+        f"""
+HR Assistance Request
+=====================
+
+Employee Name:
+{employee_name}
+
+Employee Email:
+{employee_email}
+
+The employee marked a policy conversation as:
+
+NOT SATISFIED
+
+Conversation Transcript
+======================
+
+{transcript}
+
+======================
+
+Please follow up with the employee directly.
+
+Google Chat:
+{DIRECT_GOOGLE_CHAT_HR}
+
+HR Booking Page:
+{HR_BOOKING_URL}
+"""
+    )
+
+    # --------------------------------------------------------
+    # SMTP connection
+    # --------------------------------------------------------
+
+    with smtplib.SMTP(
+        smtp_host,
+        smtp_port,
+        timeout=30
+    ) as server:
+
+        server.ehlo()
+
+        server.starttls()
+
+        server.ehlo()
+
+        server.login(
+            smtp_email,
+            smtp_password
+        )
+
+        server.send_message(msg)
 
 
 # ============================================================
@@ -197,7 +376,10 @@ def load_and_index_pdf(pdf_path):
 # GEMINI POLICY QUERY
 # ============================================================
 
-def query_policy_ai(prompt, conversation_history):
+def query_policy_ai(
+    prompt,
+    conversation_history
+):
 
     history_context = ""
 
@@ -213,8 +395,12 @@ def query_policy_ai(prompt, conversation_history):
             f"{role}: {msg['content']}\n"
         )
 
+    # --------------------------------------------------------
+    # Load policy
+    # --------------------------------------------------------
+
     pdf_pages = load_and_index_pdf(
-        "GERMANE_MEDIA_LLC_POLICY_DOCUMENT.pdf"
+        POLICY_PDF
     )
 
     full_context = "\n\n".join(
@@ -224,71 +410,106 @@ def query_policy_ai(prompt, conversation_history):
         ]
     )
 
+    # --------------------------------------------------------
+    # System prompt
+    # --------------------------------------------------------
+
     system_prompt = f"""
-You are the official GM Policy Assistant for Germane Media LLC.
+You are the official GM Policy Assistant
+for Germane Media LLC.
 
-Your role is to assist employees with workplace policies strictly
-using the provided Germane Media LLC Employee Policy Handbook.
+Your ONLY source of policy information is the
+Germane Media LLC Employee Policy Handbook
+provided below.
 
-CRITICAL RULES:
+You are NOT allowed to use general HR knowledge,
+internet information, assumptions, or outside sources.
 
-1. ANSWER STRICTLY FROM THE POLICY TEXT BELOW.
+============================================================
+IMPORTANT RULES
+============================================================
 
-2. IF THE QUESTION CANNOT BE ANSWERED FROM THE HANDBOOK,
-DO NOT USE GENERAL KNOWLEDGE.
+1. ANSWER STRICTLY FROM THE POLICY HANDBOOK.
 
-Respond exactly:
+2. DO NOT INVENT POLICY.
 
-"I couldn't find a specific provision covering this in the Germane Media LLC Employee Policy Handbook. I recommend contacting HR directly for clarification."
+3. DO NOT ASSUME INFORMATION THAT IS NOT WRITTEN
+   IN THE HANDBOOK.
 
-3. ALWAYS APPEND EXACT PAGE CITATIONS at the end of relevant facts.
+4. If the question cannot be answered from the handbook,
+   respond exactly:
+
+"I couldn't find a specific provision covering this in the
+Germane Media LLC Employee Policy Handbook. I recommend
+contacting HR directly for clarification."
+
+5. ALWAYS provide page citations.
 
 Example:
 
 [📄 Page 12]
 
-4. Maintain a professional, neutral and helpful corporate tone.
+6. If multiple pages support the answer, cite all relevant
+   pages.
 
-5. For appraisal, variable pay, or probation questions,
-explicitly note management discretion where applicable.
+Example:
 
-6. Do not invent policy.
+[📄 Page 2, Page 18, Page 24]
 
-7. Do not assume information that is not contained in the handbook.
+7. For appraisal, compensation, variable pay, probation,
+   confirmation, extension, termination or similar matters,
+   explicitly mention management discretion where the
+   handbook provides for it.
 
-8. If the employee asks a follow-up question, use the conversation
-history to understand the context.
+8. If the employee asks a follow-up question, use the
+   previous conversation to understand what they mean.
 
-9. The policy handbook is the only source of policy information.
-Do not use internet information or general HR knowledge.
+9. Keep answers professional, concise and easy to understand.
 
-10. If multiple pages support the answer, cite all relevant pages.
+10. Never claim something is policy unless it is supported
+    by the handbook.
 
-11. Keep answers reasonably concise and directly answer the question.
+11. If a policy has an exception, clearly mention it.
 
-POLICY HANDBOOK CONTEXT:
+12. If the handbook gives a specific number, date, duration,
+    percentage, amount or entitlement, reproduce it accurately.
+
+13. The Employment Agreement may prevail where applicable,
+    but do not invent Employment Agreement terms.
+
+============================================================
+POLICY HANDBOOK
+============================================================
 
 {full_context}
 
-CONVERSATION HISTORY:
+============================================================
+CONVERSATION HISTORY
+============================================================
 
 {history_context}
 
-EMPLOYEE QUESTION:
+============================================================
+EMPLOYEE QUESTION
+============================================================
 
 {prompt}
+
+============================================================
+ANSWER
+============================================================
 """
 
     try:
 
         response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=GEMINI_MODEL,
             contents=system_prompt
         )
 
         if response and response.text:
 
-            return response.text
+            return response.text.strip()
 
         raise Exception(
             "Gemini returned an empty response."
@@ -298,234 +519,9 @@ EMPLOYEE QUESTION:
 
         raise Exception(
             "AI Assistant is currently unavailable. "
-            "Please contact HR."
+            "Please contact HR. "
+            f"Technical details: {str(e)}"
         )
-
-
-# ============================================================
-# BUILD TRANSCRIPT HTML
-# ============================================================
-
-def build_transcript_html(
-    employee_name,
-    employee_email,
-    messages
-):
-
-    timestamp = datetime.now().strftime(
-        "%d %B %Y, %I:%M %p"
-    )
-
-    transcript_html = ""
-
-    for message in messages:
-
-        role = message.get("role", "")
-        content = message.get("content", "")
-
-        safe_content = escape(content).replace(
-            "\n",
-            "<br>"
-        )
-
-        if role == "user":
-
-            transcript_html += f"""
-            <div style="
-                margin-bottom:20px;
-                padding:14px;
-                background:#f8fafc;
-                border-radius:8px;
-                border-left:4px solid #64748b;
-            ">
-                <strong>Employee</strong><br><br>
-                {safe_content}
-            </div>
-            """
-
-        elif role == "assistant":
-
-            transcript_html += f"""
-            <div style="
-                margin-bottom:20px;
-                padding:14px;
-                background:#eff6ff;
-                border-radius:8px;
-                border-left:4px solid #0284c7;
-            ">
-                <strong>GM Policy Assistant</strong><br><br>
-                {safe_content}
-            </div>
-            """
-
-    return f"""
-    <html>
-
-    <body style="
-        font-family:Arial,sans-serif;
-        color:#1e293b;
-        line-height:1.5;
-    ">
-
-        <h2>
-            GM Policy Assistant - Conversation Transcript
-        </h2>
-
-        <p>
-            <strong>Employee:</strong>
-            {escape(employee_name)}
-        </p>
-
-        <p>
-            <strong>Email:</strong>
-            {escape(employee_email)}
-        </p>
-
-        <p>
-            <strong>Date:</strong>
-            {escape(timestamp)}
-        </p>
-
-        <hr>
-
-        {transcript_html}
-
-        <hr>
-
-        <p style="
-            font-size:12px;
-            color:#64748b;
-        ">
-            This transcript was generated by the
-            Germane Media LLC Policy Assistant.
-        </p>
-
-    </body>
-
-    </html>
-    """
-
-
-# ============================================================
-# SEND EMAIL
-# ============================================================
-
-def send_email(
-    recipient,
-    subject,
-    html_body,
-    cc=None
-):
-
-    smtp_email = st.secrets.get(
-        "SMTP_EMAIL"
-    )
-
-    smtp_password = st.secrets.get(
-        "SMTP_PASSWORD"
-    )
-
-    if not smtp_email or not smtp_password:
-
-        raise Exception(
-            "Email service is not configured. "
-            "Please check SMTP_EMAIL and SMTP_PASSWORD "
-            "in Streamlit Secrets."
-        )
-
-    msg = MIMEMultipart(
-        "alternative"
-    )
-
-    msg["Subject"] = subject
-    msg["From"] = smtp_email
-    msg["To"] = recipient
-
-    if cc:
-
-        msg["Cc"] = cc
-
-    msg.attach(
-        MIMEText(
-            html_body,
-            "html"
-        )
-    )
-
-    with smtplib.SMTP(
-        "smtp.gmail.com",
-        587
-    ) as server:
-
-        server.starttls()
-
-        server.login(
-            smtp_email,
-            smtp_password
-        )
-
-        server.send_message(
-            msg
-        )
-
-
-# ============================================================
-# SEND NOT SATISFIED ESCALATION
-# ============================================================
-
-def send_hr_escalation(
-    employee_name,
-    employee_email,
-    messages
-):
-
-    html_body = build_transcript_html(
-        employee_name,
-        employee_email,
-        messages
-    )
-
-    subject = (
-        "⚠️ Policy Assistant - "
-        f"Employee Needs HR Assistance - "
-        f"{employee_name}"
-    )
-
-    send_email(
-        recipient=HR_EMAIL,
-        subject=subject,
-        html_body=html_body,
-        cc=employee_email
-    )
-
-
-# ============================================================
-# SEND EMPLOYEE TRANSCRIPT
-# ============================================================
-
-def send_employee_transcript(
-    employee_name,
-    employee_email,
-    messages
-):
-
-    html_body = build_transcript_html(
-        employee_name,
-        employee_email,
-        messages
-    )
-
-    subject = (
-        "GM Policy Assistant - "
-        "Your Conversation Transcript"
-    )
-
-    send_email(
-        recipient=employee_email,
-        subject=subject,
-        html_body=html_body,
-        cc=HR_EMAIL
-    )
 
 
 # ============================================================
@@ -573,16 +569,12 @@ if not st.user.is_logged_in:
     st.markdown(
         """
         <div class="security-note">
-
         Please use your official
         <b>@thegermanemedia.com</b>
         Google Workspace account.
-
         <br><br>
-
         Your policy conversations are associated with
         your authenticated company account.
-
         </div>
         """,
         unsafe_allow_html=True
@@ -675,19 +667,14 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
-if "feedback" not in st.session_state:
+if "unsatisfied_msg_idx" not in st.session_state:
 
-    st.session_state.feedback = {}
-
-
-if "hr_escalated" not in st.session_state:
-
-    st.session_state.hr_escalated = set()
+    st.session_state.unsatisfied_msg_idx = None
 
 
-if "transcript_sent" not in st.session_state:
+if "hr_email_sent" not in st.session_state:
 
-    st.session_state.transcript_sent = False
+    st.session_state.hr_email_sent = False
 
 
 # ============================================================
@@ -801,6 +788,8 @@ with col_main:
         Your chat session is associated with your
         authenticated employee account.
 
+        <br><br>
+
         HR may access transcripts for support and
         policy administration.
 
@@ -827,83 +816,63 @@ with col_main:
             )
 
             # ------------------------------------------------
-            # FEEDBACK BUTTONS
+            # Feedback buttons for assistant responses
             # ------------------------------------------------
 
             if message["role"] == "assistant":
 
-                feedback = (
-                    st.session_state.feedback.get(
-                        idx
-                    )
+                col_sat, col_not_sat, col_space = st.columns(
+                    [1, 1, 3]
                 )
 
-                if feedback == "satisfied":
+                # --------------------------------------------
+                # SATISFIED
+                # --------------------------------------------
 
-                    st.success(
-                        "✅ Thank you! "
-                        "We're glad the answer helped."
-                    )
+                with col_sat:
 
-                elif feedback == "not_satisfied":
+                    if st.button(
+                        "✅ Satisfied",
+                        key=f"satisfied_{idx}"
+                    ):
 
-                    st.warning(
-                        "❌ We've marked this conversation "
-                        "for HR assistance."
-                    )
-
-                else:
-
-                    col1, col2, _ = st.columns(
-                        [1, 1, 3]
-                    )
-
-                    with col1:
-
-                        if st.button(
-                            "✅ Satisfied",
-                            key=f"satisfied_{idx}",
-                            width="stretch"
-                        ):
-
-                            st.session_state.feedback[
-                                idx
-                            ] = "satisfied"
-
-                            st.rerun()
-
-                    with col2:
-
-                        if st.button(
-                            "❌ Not Satisfied",
-                            key=f"not_satisfied_{idx}",
-                            width="stretch"
-                        ):
-
-                            st.session_state.feedback[
-                                idx
-                            ] = "not_satisfied"
-
-                            st.rerun()
-
+                        st.toast(
+                            "Thank you for your feedback!"
+                        )
 
                 # --------------------------------------------
-                # HR ESCALATION
+                # NOT SATISFIED
                 # --------------------------------------------
+
+                with col_not_sat:
+
+                    if st.button(
+                        "❌ Not Satisfied",
+                        key=f"not_satisfied_{idx}"
+                    ):
+
+                        st.session_state.unsatisfied_msg_idx = idx
+
+                        # Reset email state for this request
+                        st.session_state.hr_email_sent = False
+
+                        st.rerun()
+
+
+                # ------------------------------------------------
+                # HR ESCALATION AREA
+                # ------------------------------------------------
 
                 if (
-                    st.session_state.feedback.get(idx)
-                    == "not_satisfied"
+                    st.session_state.unsatisfied_msg_idx
+                    == idx
                 ):
 
                     st.markdown(
                         """
                         <div class="escalation-box">
 
-                        <b>
-                        We're sorry we couldn't fully resolve
-                        your question.
-                        </b>
+                        <b>We're sorry we couldn't fully resolve your question.</b>
 
                         <br><br>
 
@@ -915,11 +884,15 @@ with col_main:
                         unsafe_allow_html=True
                     )
 
-                    col_a, col_b = st.columns(
+                    col_email, col_calendar = st.columns(
                         [1, 1]
                     )
 
-                    with col_a:
+                    # --------------------------------------------
+                    # SEND TO HR
+                    # --------------------------------------------
+
+                    with col_email:
 
                         if st.button(
                             "📧 Send to HR",
@@ -927,44 +900,38 @@ with col_main:
                             width="stretch"
                         ):
 
-                            if idx not in st.session_state.hr_escalated:
+                            try:
 
-                                with st.spinner(
-                                    "Sending conversation to HR..."
-                                ):
-
-                                    try:
-
-                                        send_hr_escalation(
-                                            st.session_state.emp_name,
-                                            st.session_state.emp_email,
-                                            st.session_state.messages
-                                        )
-
-                                        st.session_state.hr_escalated.add(
-                                            idx
-                                        )
-
-                                        st.success(
-                                            "✅ HR has been notified. "
-                                            "A copy has also been sent "
-                                            "to your company email."
-                                        )
-
-                                    except Exception as e:
-
-                                        st.error(
-                                            f"Unable to notify HR: {str(e)}"
-                                        )
-
-                            else:
-
-                                st.info(
-                                    "HR has already been notified "
-                                    "for this conversation."
+                                send_hr_email(
+                                    employee_name=(
+                                        st.session_state.emp_name
+                                    ),
+                                    employee_email=(
+                                        st.session_state.emp_email
+                                    ),
+                                    conversation=(
+                                        st.session_state.messages
+                                    )
                                 )
 
-                    with col_b:
+                                st.session_state.hr_email_sent = True
+
+                                st.success(
+                                    "Your conversation has been "
+                                    "sent to HR successfully."
+                                )
+
+                            except Exception as e:
+
+                                st.error(
+                                    f"Unable to notify HR: {str(e)}"
+                                )
+
+                    # --------------------------------------------
+                    # SCHEDULE HR CALL
+                    # --------------------------------------------
+
+                    with col_calendar:
 
                         st.link_button(
                             "📅 Schedule HR Call",
@@ -972,62 +939,26 @@ with col_main:
                             width="stretch"
                         )
 
+                    # --------------------------------------------
+                    # EMAIL SENT MESSAGE
+                    # --------------------------------------------
 
-    # ========================================================
-    # EMAIL COMPLETE TRANSCRIPT
-    # ========================================================
+                    if st.session_state.hr_email_sent:
 
-    if st.session_state.messages:
+                        st.markdown(
+                            """
+                            <div class="success-box">
 
-        st.divider()
+                            ✅ <b>HR has been notified.</b>
 
-        st.markdown(
-            "### 📧 Conversation Transcript"
-        )
+                            Your conversation transcript has been
+                            sent to HR. You can also schedule a
+                            confidential discussion if required.
 
-        st.caption(
-            "You can email a copy of this conversation "
-            "to your company email and HR."
-        )
-
-        if st.button(
-            "📧 Email Conversation Transcript",
-            width="stretch"
-        ):
-
-            if not st.session_state.transcript_sent:
-
-                with st.spinner(
-                    "Sending transcript..."
-                ):
-
-                    try:
-
-                        send_employee_transcript(
-                            st.session_state.emp_name,
-                            st.session_state.emp_email,
-                            st.session_state.messages
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
-
-                        st.session_state.transcript_sent = True
-
-                        st.success(
-                            "✅ Transcript sent successfully "
-                            "to your email and HR."
-                        )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Unable to send transcript: {str(e)}"
-                        )
-
-            else:
-
-                st.info(
-                    "The transcript has already been sent "
-                    "for this session."
-                )
 
 
     # ========================================================
@@ -1048,6 +979,10 @@ with col_main:
                 "content": user_query
             }
         )
+
+        # Reset previous escalation state
+        st.session_state.unsatisfied_msg_idx = None
+        st.session_state.hr_email_sent = False
 
         with st.spinner(
             "Searching Germane Media Policy Handbook..."
@@ -1075,9 +1010,6 @@ with col_main:
                         "content": full_response
                     }
                 )
-
-                # New answer means a fresh transcript state
-                st.session_state.transcript_sent = False
 
                 st.rerun()
 
