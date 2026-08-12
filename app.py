@@ -4,6 +4,7 @@ from pypdf import PdfReader
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from datetime import date, time, datetime
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -15,7 +16,6 @@ st.set_page_config(
 
 # --- HR CONFIGURATION ---
 HR_EMAIL = "tarang@thegermanemedia.com"
-GOOGLE_CALENDAR_LINK = "https://calendar.google.com/calendar/u/0/r/eventedit?text=15-Min+HR+Policy+Discussion"
 GOOGLE_CHAT_LINK = "https://chat.google.com/"
 
 # --- STYLING ---
@@ -58,11 +58,9 @@ def load_and_index_pdf(pdf_path):
         pages_text.append({"page": idx + 1, "text": text})
     return pages_text
 
-# --- GEMINI GENERATION WITH AUTOMATIC MODEL SELECTION ---
+# --- GEMINI GENERATION ---
 def query_gemini_ai(prompt):
     candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
-    
-    # Try dynamically listing available models from user's account
     try:
         available_models = [m.name.replace("models/", "") for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
         for m in available_models:
@@ -112,9 +110,15 @@ def send_transcript_email(employee_email, employee_name, chat_history):
             server.sendmail(sender_email, recipients, msg.as_string())
             server.quit()
             return True
-        except Exception:
+        except Exception as e:
+            st.error(f"Email Error: {e}")
             return False
     return False
+
+# --- SESSION STATE INITIALIZATION FOR BOOKINGS ---
+if "booked_slots" not in st.session_state:
+    # Key format: 'YYYY-MM-DD HH:MM'
+    st.session_state.booked_slots = set()
 
 # --- SIDEBAR COMPONENT ---
 with st.sidebar:
@@ -123,10 +127,7 @@ with st.sidebar:
     st.divider()
     
     st.markdown("💬 **Chat with Policy AI**")
-    st.markdown("🕒 My Conversations")
-    st.markdown("❓ FAQ / Quick Help")
     st.markdown("📄 Company Policies")
-    st.markdown("📅 Schedule with HR")
     st.markdown("💬 Contact HR")
     
     st.divider()
@@ -186,7 +187,7 @@ with col_main:
                         st.toast("Thank you for your feedback!")
                 with col_unsat:
                     if st.button("👎 Not Satisfied", key=f"unsat_{idx}"):
-                        st.toast("We're sorry! Please use the right sidebar to connect directly with HR.")
+                        st.toast("We're sorry! Please use the right sidebar to schedule a call with HR.")
 
     # User Input Field
     user_query = st.chat_input("Type your question here...")
@@ -226,11 +227,17 @@ with col_main:
             st.error(f"Error connecting to AI engine. Details: {e}")
 
     st.divider()
-    if st.button("📧 End Chat & Send Transcript to Email"):
-        if send_transcript_email(st.session_state.emp_email, st.session_state.emp_name, st.session_state.messages):
-            st.success(f"Chat transcript sent to {st.session_state.emp_email} and CC'd to {HR_EMAIL}!")
+    
+    # Email Transcript Section
+    if st.button(f"📧 Send Chat Transcript to My Email ({st.session_state.emp_email})"):
+        if "SMTP_USER" not in st.secrets or "SMTP_PASSWORD" not in st.secrets:
+            st.warning("⚠️ Email credentials are not configured in Streamlit Secrets yet. Please add SMTP_USER and SMTP_PASSWORD to your secrets.")
         else:
-            st.info(f"Chat session completed. Copy sent to HR ({HR_EMAIL}).")
+            with st.spinner("Sending email..."):
+                if send_transcript_email(st.session_state.emp_email, st.session_state.emp_name, st.session_state.messages):
+                    st.success(f"Transcript sent to **{st.session_state.emp_email}** (CC'd to {HR_EMAIL})!")
+                else:
+                    st.error("Failed to send email. Please verify your Gmail App Password setup in Streamlit Secrets.")
 
 # --- RIGHT SIDEBAR ---
 with col_right:
@@ -250,8 +257,33 @@ with col_right:
             
     st.divider()
     
-    st.markdown("### **Need More Help?**")
-    st.caption("Connect directly with HR:")
+    # INTERACTIVE HR MEETING SCHEDULER
+    st.markdown("### 📅 **Schedule Meeting with HR**")
     
-    st.link_button("📅 Schedule 15-min Call", GOOGLE_CALENDAR_LINK, use_container_width=True)
+    selected_date = st.date_input("Select Date", min_value=date.today())
+    
+    # Standard working hours slots (15-min intervals)
+    all_slots = [
+        "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+        "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM"
+    ]
+    
+    # Filter out slots that are already booked for the selected date
+    available_slots = [
+        slot for slot in all_slots 
+        if f"{selected_date}_{slot}" not in st.session_state.booked_slots
+    ]
+    
+    if available_slots:
+        selected_slot = st.selectbox("Available Time Slots", available_slots)
+        
+        if st.button("Confirm Meeting Slot", type="primary", use_container_width=True):
+            slot_key = f"{selected_date}_{selected_slot}"
+            st.session_state.booked_slots.add(slot_key)
+            st.success(f"✅ Meeting booked with HR for **{selected_date}** at **{selected_slot}**!")
+            st.info(f"Notification sent to HR ({HR_EMAIL}).")
+    else:
+        st.error("❌ No slots available for this date. Please pick another date.")
+        
+    st.divider()
     st.link_button("💬 Chat on Google Chat", GOOGLE_CHAT_LINK, use_container_width=True)
