@@ -1,11 +1,8 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from pypdf import PdfReader
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import date, datetime, timedelta
 import urllib.parse
+from datetime import date, datetime, timedelta
 
 
 # ============================================================
@@ -143,13 +140,32 @@ st.markdown(
 
 
 # ============================================================
-# GEMINI API
+# GEMINI API - NEW GOOGLE GENAI SDK
 # ============================================================
 
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(
+if "GEMINI_API_KEY" not in st.secrets:
+
+    st.error(
+        "Gemini API key is not configured. Please contact the administrator."
+    )
+
+    st.stop()
+
+
+try:
+
+    gemini_client = genai.Client(
         api_key=st.secrets["GEMINI_API_KEY"]
     )
+
+except Exception:
+
+    st.error(
+        "Unable to initialize the Gemini AI service. "
+        "Please contact the administrator."
+    )
+
+    st.stop()
 
 
 # ============================================================
@@ -182,13 +198,6 @@ def load_and_index_pdf(pdf_path):
 # ============================================================
 
 def query_policy_ai(prompt, conversation_history):
-
-    candidate_models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-2.0-flash",
-        "gemini-pro"
-    ]
 
     history_context = ""
 
@@ -250,6 +259,11 @@ explicitly note management discretion where applicable.
 8. If the employee asks a follow-up question, use the conversation
 history to understand the context.
 
+9. The policy handbook is the only source of policy information.
+Do not use internet information or general HR knowledge.
+
+10. If multiple pages support the answer, cite all relevant pages.
+
 POLICY HANDBOOK CONTEXT:
 
 {full_context}
@@ -263,29 +277,27 @@ EMPLOYEE QUESTION:
 {prompt}
 """
 
-    for model_name in candidate_models:
+    try:
 
-        try:
+        response = gemini_client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=system_prompt
+        )
 
-            model = genai.GenerativeModel(
-                model_name
-            )
+        if response and response.text:
 
-            response = model.generate_content(
-                system_prompt
-            )
+            return response.text
 
-            if response and response.text:
+        raise Exception(
+            "Gemini returned an empty response."
+        )
 
-                return response.text
+    except Exception as e:
 
-        except Exception:
-
-            continue
-
-    raise Exception(
-        "AI Assistant is currently unavailable. Please contact HR."
-    )
+        raise Exception(
+            f"AI Assistant is currently unavailable. "
+            f"Please contact HR. Technical details: {str(e)}"
+        )
 
 
 # ============================================================
@@ -382,7 +394,7 @@ if not st.user.is_logged_in:
     if st.button(
         "🔐 Sign in with Google",
         type="primary",
-        use_container_width=True
+        width="stretch"
     ):
 
         st.login()
@@ -525,7 +537,7 @@ with st.sidebar:
         if st.button(
             f"📄 {cat}",
             key=cat,
-            use_container_width=True
+            width="stretch"
         ):
 
             st.session_state.messages.append(
@@ -543,14 +555,14 @@ with st.sidebar:
     st.link_button(
         "💬 Message HR on Google Chat",
         DIRECT_GOOGLE_CHAT_HR,
-        use_container_width=True
+        width="stretch"
     )
 
     st.divider()
 
     if st.button(
         "🚪 Sign Out",
-        use_container_width=True
+        width="stretch"
     ):
 
         st.session_state.clear()
@@ -775,7 +787,7 @@ with col_right:
         "📅 Open & Save in Google Calendar",
         gcal_url,
         type="primary",
-        use_container_width=True
+        width="stretch"
     )
 
     st.divider()
@@ -796,7 +808,7 @@ with col_right:
         if st.button(
             f"❓ {q}",
             key=q,
-            use_container_width=True
+            width="stretch"
         ):
 
             st.session_state.messages.append(
