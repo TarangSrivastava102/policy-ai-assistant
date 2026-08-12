@@ -1,8 +1,6 @@
 import streamlit as st
 from google import genai
 from pypdf import PdfReader
-import urllib.parse
-from datetime import date, datetime, timedelta
 
 
 # ============================================================
@@ -23,6 +21,11 @@ st.set_page_config(
 
 HR_EMAIL = "tarang@thegermanemedia.com"
 COMPANY_DOMAIN = "thegermanemedia.com"
+
+# Google Calendar Appointment Schedule
+HR_BOOKING_URL = (
+    "https://calendar.app.google/wjkBcfyeAgKqCRUVA"
+)
 
 DIRECT_GOOGLE_CHAT_HR = (
     f"https://chat.google.com/dm/{HR_EMAIL}"
@@ -298,63 +301,6 @@ EMPLOYEE QUESTION:
             f"AI Assistant is currently unavailable. "
             f"Please contact HR. Technical details: {str(e)}"
         )
-
-
-# ============================================================
-# GOOGLE CALENDAR
-# ============================================================
-
-def generate_gcal_link(
-    title,
-    meeting_date,
-    time_slot,
-    employee_name,
-    employee_email
-):
-
-    dt_start = datetime.strptime(
-        f"{meeting_date} {time_slot}",
-        "%Y-%m-%d %I:%M %p"
-    )
-
-    dt_end = dt_start + timedelta(
-        minutes=30
-    )
-
-    start_str = dt_start.strftime(
-        "%Y%m%dT%H%M%S"
-    )
-
-    end_str = dt_end.strftime(
-        "%Y%m%dT%H%M%S"
-    )
-
-    event_title = (
-        f"HR Discussion: {title} - {employee_name}"
-    )
-
-    event_details = (
-        f"Topic: {title}\n\n"
-        f"Participants:\n"
-        f"- {employee_name} ({employee_email})\n"
-        f"- Tarang ({HR_EMAIL})\n\n"
-        f"Scheduled via GM Policy Assistant."
-    )
-
-    query = [
-        "action=TEMPLATE",
-        f"text={urllib.parse.quote(event_title)}",
-        f"dates={start_str}/{end_str}",
-        f"details={urllib.parse.quote(event_details)}",
-        f"add={urllib.parse.quote(employee_email)}",
-        f"add={urllib.parse.quote(HR_EMAIL)}",
-        "ctz=Asia/Kolkata"
-    ]
-
-    return (
-        "https://calendar.google.com/calendar/render?"
-        + "&".join(query)
-    )
 
 
 # ============================================================
@@ -747,46 +693,32 @@ with col_right:
     )
 
     st.caption(
-        "Select a time slot to meet with Tarang (HR):"
-    )
-
-    meeting_subject = st.text_input(
-        "Meeting Subject",
-        value="Policy Discussion"
-    )
-
-    selected_date = st.date_input(
-        "Date",
-        min_value=date.today()
-    )
-
-    selected_time = st.selectbox(
-        "Time Slot",
-        [
-            "10:00 AM",
-            "10:30 AM",
-            "11:00 AM",
-            "11:30 AM",
-            "02:00 PM",
-            "02:30 PM",
-            "03:00 PM",
-            "03:30 PM",
-            "04:00 PM"
-        ]
-    )
-
-    gcal_url = generate_gcal_link(
-        title=meeting_subject,
-        meeting_date=selected_date,
-        time_slot=selected_time,
-        employee_name=st.session_state.emp_name,
-        employee_email=st.session_state.emp_email
+        "Need to speak directly with HR? "
+        "Book a 15-minute confidential discussion."
     )
 
     st.link_button(
-        "📅 Open & Save in Google Calendar",
-        gcal_url,
+        "📅 Schedule 15-Minute HR Discussion",
+        HR_BOOKING_URL,
         type="primary",
+        width="stretch"
+    )
+
+    st.caption(
+        "Google Calendar will show only the available "
+        "appointment slots. A Google Meet link will be "
+        "provided after booking."
+    )
+
+    st.divider()
+
+    st.markdown(
+        "💬 **Need immediate help?**"
+    )
+
+    st.link_button(
+        "💬 Contact HR on Google Chat",
+        DIRECT_GOOGLE_CHAT_HR,
         width="stretch"
     )
 
