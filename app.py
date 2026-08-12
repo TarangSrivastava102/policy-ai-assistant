@@ -4,8 +4,9 @@ from pypdf import PdfReader
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import date
+from datetime import date, datetime, timedelta
 import urllib.parse
+import uuid
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -157,39 +158,72 @@ def send_transcript_email(employee_email, employee_name, chat_history):
             return False
     return False
 
-# --- MEETING NOTIFICATION EMAIL TO HR ---
+# --- CALENDAR INVITE & EMAIL NOTIFICATION FUNCTION ---
 def send_hr_meeting_email(employee_name, employee_email, meeting_date, time_slot, subject_reason):
     if "SMTP_USER" in st.secrets and "SMTP_PASSWORD" in st.secrets:
         try:
             sender_email = st.secrets["SMTP_USER"]
             sender_password = st.secrets["SMTP_PASSWORD"]
             
-            msg = MIMEMultipart()
-            msg['From'] = sender_email
-            msg['To'] = HR_EMAIL
-            msg['Cc'] = employee_email
-            msg['Subject'] = f"📅 New Meeting Scheduled: {subject_reason} - {employee_name}"
+            # Calculate start and end datetimes
+            dt_start = datetime.strptime(f"{meeting_date} {time_slot}", "%Y-%m-%d %I:%M %p")
+            dt_end = dt_start + timedelta(minutes=30)
             
-            body = f"""Hello Tarang (HR),
+            dt_start_str = dt_start.strftime("%Y%m%dT%H%M%S")
+            dt_end_str = dt_end.strftime("%Y%m%dT%H%M%S")
+            dt_stamp_str = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+            event_uid = f"{uuid.uuid4()}@thegermanemedia.com"
+            
+            msg = MIMEMultipart('mixed')
+            msg['From'] = sender_email
+            msg['To'] = employee_email
+            msg['Cc'] = HR_EMAIL
+            msg['Subject'] = f"📅 HR Meeting Invitation: {subject_reason} - {employee_name}"
+            
+            # Plain Text Body
+            body = f"""Hello {employee_name} and Tarang (HR),
 
-{employee_name} ({employee_email}) has scheduled an HR meeting with you via Policy AI Assistant.
+An HR discussion meeting has been scheduled via the Germane Media Policy AI Assistant.
 
 📌 Meeting Details:
-- Employee Name: {employee_name}
-- Employee Email: {employee_email}
+- Reason / Subject: {subject_reason}
 - Date: {meeting_date}
-- Time Slot: {time_slot}
-- Mandatory Subject/Reason: {subject_reason}
+- Time: {time_slot} (30 Minutes)
+- Participants: {employee_name} ({employee_email}) & Tarang ({HR_EMAIL})
 
-Best regards,
-Germane Media Policy AI Assistant
+An interactive calendar invite has been attached to this email and will automatically sync with your Google Calendar.
 """
             msg.attach(MIMEText(body, 'plain'))
+            
+            # iCalendar (.ics) Attachment Format for Automatic Calendar Sync
+            ics_content = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Germane Media LLC//HR Assistant//EN
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:{event_uid}
+DTSTAMP:{dt_stamp_str}
+DTSTART:{dt_start_str}
+DTEND:{dt_end_str}
+SUMMARY:HR Meeting: {subject_reason}
+DESCRIPTION:HR Meeting scheduled via Policy AI Assistant.\\n\\nEmployee: {employee_name} ({employee_email})\\nReason: {subject_reason}
+ORGANIZER;CN="Germane Media HR":mailto:{HR_EMAIL}
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN="Tarang (HR)":mailto:{HR_EMAIL}
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN="{employee_name}":mailto:{employee_email}
+STATUS:CONFIRMED
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR"""
+
+            ics_part = MIMEText(ics_content, 'calendar; method=REQUEST')
+            ics_part.add_header('Content-Disposition', 'inline; filename="invite.ics"')
+            msg.attach(ics_part)
             
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
             server.login(sender_email, sender_password)
-            recipients = [HR_EMAIL, employee_email]
+            recipients = [employee_email, HR_EMAIL]
             server.sendmail(sender_email, recipients, msg.as_string())
             server.quit()
             return True
@@ -343,7 +377,7 @@ with col_right:
             
     st.divider()
     
-    # INTERACTIVE HR MEETING SCHEDULER WITH MANDATORY SUBJECT
+    # INTERACTIVE HR MEETING SCHEDULER
     st.markdown("### 📅 **Schedule Meeting with HR**")
     
     selected_date = st.date_input("Select Date", min_value=date.today())
@@ -363,32 +397,24 @@ with col_right:
         
         # MANDATORY SUBJECT FIELD
         meeting_subject = st.text_input("Meeting Subject / Reason *", placeholder="e.g., Leave approval discussion")
-        
-        # Calendar Link Helper
-        encoded_title = urllib.parse.quote(f"HR Meeting: {meeting_subject if meeting_subject else 'Discussion'} - {st.session_state.emp_name}")
-        encoded_details = urllib.parse.quote(f"Reason: {meeting_subject}\nEmployee: {st.session_state.emp_name} ({st.session_state.emp_email})")
-        date_str = selected_date.strftime("%Y%m%d")
-        gcal_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={encoded_title}&details={encoded_details}&add={HR_EMAIL}&dates={date_str}T100000Z/{date_str}T103000Z"
 
-        if st.button("Confirm Meeting & Send Request", type="primary", use_container_width=True):
+        if st.button("Confirm Meeting & Send Invite", type="primary", use_container_width=True):
             if not meeting_subject.strip():
                 st.error("⚠️ Please enter a subject/reason for the meeting before confirming.")
             else:
                 slot_key = f"{selected_date}_{selected_slot}"
                 st.session_state.booked_slots.add(slot_key)
                 
-                # Send email notification to HR
-                send_hr_meeting_email(
+                # Send email notification + .ics calendar event to both HR and Employee
+                if send_hr_meeting_email(
                     st.session_state.emp_name, 
                     st.session_state.emp_email, 
                     selected_date, 
                     selected_slot, 
                     meeting_subject
-                )
-                
-                st.success(f"✅ Meeting booked for **{selected_date}** at **{selected_slot}**!")
-                st.info(f"📧 Notification email sent to HR ({HR_EMAIL}).")
-                st.link_button("📅 Add to Google Calendar", gcal_url, use_container_width=True)
+                ):
+                    st.success(f"✅ Meeting booked for **{selected_date}** at **{selected_slot}**!")
+                    st.info(f"📧 Interactive calendar invite sent to **{st.session_state.emp_email}** and **{HR_EMAIL}**!")
     else:
         st.error("❌ No slots available for this date. Please pick another date.")
         
