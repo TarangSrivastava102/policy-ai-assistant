@@ -18,21 +18,20 @@ HR_EMAIL = "tarang@thegermanemedia.com"
 GOOGLE_CALENDAR_LINK = "https://calendar.google.com/calendar/u/0/r/eventedit?text=15-Min+HR+Policy+Discussion"
 GOOGLE_CHAT_LINK = "https://chat.google.com/"
 
-# --- STYLING (THEME FIX) ---
+# --- STYLING ---
 st.markdown("""
 <style>
-    /* Source citation box styling */
     .source-box {
-        background-color: rgba(0, 0, 0, 0.05);
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        background-color: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 13px;
         margin-top: 8px;
     }
     .badge-safe {
-        background-color: rgba(0, 0, 0, 0.05);
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        background-color: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: 12px;
         text-align: left;
@@ -58,6 +57,32 @@ def load_and_index_pdf(pdf_path):
         text = page.extract_text() or ""
         pages_text.append({"page": idx + 1, "text": text})
     return pages_text
+
+# --- GEMINI GENERATION WITH AUTOMATIC MODEL SELECTION ---
+def query_gemini_ai(prompt):
+    candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
+    
+    # Try dynamically listing available models from user's account
+    try:
+        available_models = [m.name.replace("models/", "") for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        for m in available_models:
+            if m not in candidate_models:
+                candidate_models.insert(0, m)
+    except Exception:
+        pass
+
+    last_error = None
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise Exception(f"Could not fetch AI response: {last_error}")
 
 # --- EMAIL SENDER FUNCTION ---
 def send_transcript_email(employee_email, employee_name, chat_history):
@@ -179,7 +204,7 @@ with col_main:
             
             Instructions:
             1. Provide a direct, precise, and helpful answer.
-            2. ALWAYS cite the exact Page Number(s) where the relevant policy is mentioned.
+            2. ALWAYS cite the exact Page Number(s) from the text below where the policy is described.
             3. Maintain a warm, professional tone.
             
             Policy Document Context:
@@ -188,35 +213,17 @@ with col_main:
             User Query: {user_query}
             """
             
-            response = None
-candidate_models = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
-    "gemini-pro"
-]
-
-for model_name in candidate_models:
-    try:
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        if response:
-            break
-    except Exception:
-        continue
-
-if not response:
-    raise Exception("Could not establish connection with Gemini models. Please check your GEMINI_API_KEY in Streamlit Secrets.")
+            ai_response = query_gemini_ai(prompt)
             
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": response.text,
+                "content": ai_response,
                 "source": "Referenced from Germane Media Policy Handbook"
             })
             st.rerun()
             
         except Exception as e:
-            st.error(f"Error connecting to AI engine. Please check API Key settings. Details: {e}")
+            st.error(f"Error connecting to AI engine. Details: {e}")
 
     st.divider()
     if st.button("📧 End Chat & Send Transcript to Email"):
