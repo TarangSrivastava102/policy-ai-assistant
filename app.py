@@ -20,15 +20,13 @@ st.set_page_config(
 HR_EMAIL = "tarang@thegermanemedia.com"
 DIRECT_GOOGLE_CHAT_HR = f"https://chat.google.com/dm/{HR_EMAIL}"
 
-# --- PROFESSIONAL UI CUSTOM CSS ---
+# --- CUSTOM APP CSS ---
 st.markdown("""
 <style>
-    /* Global Typography */
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Fixed Sticky Right Column */
     [data-testid="stColumn"]:nth-child(2) {
         position: sticky;
         top: 2rem;
@@ -38,7 +36,6 @@ st.markdown("""
         padding-right: 5px;
     }
 
-    /* Sidebar Header & Branding */
     .sidebar-header-title {
         font-size: 20px;
         font-weight: 700;
@@ -53,7 +50,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
 
-    /* Source Citation Card */
     .source-box {
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -65,7 +61,6 @@ st.markdown("""
         color: #cbd5e1;
     }
 
-    /* Privacy & Info Badges */
     .badge-safe {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -91,7 +86,7 @@ st.markdown("""
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- PDF PROCESSING & CACHING ---
+# --- PDF PROCESSING ---
 @st.cache_resource
 def load_and_index_pdf(pdf_path):
     reader = PdfReader(pdf_path)
@@ -101,7 +96,7 @@ def load_and_index_pdf(pdf_path):
         pages_text.append({"page": idx + 1, "text": text})
     return pages_text
 
-# --- GEMINI GENERATION ---
+# --- GEMINI AI QUERY ---
 def query_gemini_ai(prompt):
     candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
     try:
@@ -125,26 +120,71 @@ def query_gemini_ai(prompt):
 
     raise Exception(f"Could not fetch AI response: {last_error}")
 
-# --- EMAIL TRANSCRIPT SENDER FUNCTION ---
+# --- RICH HTML TRANSCRIPT EMAIL SENDER ---
 def send_transcript_email(employee_email, employee_name, chat_history):
     if "SMTP_USER" in st.secrets and "SMTP_PASSWORD" in st.secrets:
         try:
             sender_email = st.secrets["SMTP_USER"]
             sender_password = st.secrets["SMTP_PASSWORD"]
             
-            msg = MIMEMultipart()
-            msg['From'] = sender_email
+            msg = MIMEMultipart('alternative')
+            msg['From'] = f"Germane Media Policy AI <{sender_email}>"
             msg['To'] = employee_email
             msg['Cc'] = HR_EMAIL
-            msg['Subject'] = f"Policy Chat Transcript - {employee_name}"
+            msg['Subject'] = f"📄 Policy Chat Transcript - {employee_name}"
             
-            body = f"Hello {employee_name},\n\nHere is the transcript of your recent interaction with the Germane Media Policy AI Assistant:\n\n"
+            # Format chat HTML
+            chat_html = ""
             for message in chat_history:
-                role = "You" if message["role"] == "user" else "Policy AI"
-                body += f"[{role}]: {message['content']}\n\n"
+                role = "You" if message["role"] == "user" else "Policy AI Assistant"
+                bg_color = "#f8fafc" if message["role"] == "user" else "#eff6ff"
+                border_color = "#cbd5e1" if message["role"] == "user" else "#93c5fd"
+                chat_html += f"""
+                <div style="background-color: {bg_color}; border-left: 4px solid {border_color}; padding: 12px 16px; margin-bottom: 12px; border-radius: 6px;">
+                    <strong style="color: #0f172a; font-size: 14px;">{role}:</strong>
+                    <p style="margin: 6px 0 0 0; color: #334155; font-size: 14px; line-height: 1.5;">{message['content']}</p>
+                </div>
+                """
+
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <body style="margin: 0; padding: 20px; background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    
+                    <!-- HEADER BANNER -->
+                    <div style="background-color: #002B49; padding: 28px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
+                            💬 Policy Chat Transcript
+                        </h1>
+                        <p style="color: #94a3b8; margin: 6px 0 0 0; font-size: 13px;">Germane Media LLC</p>
+                    </div>
+
+                    <!-- BODY CONTENT -->
+                    <div style="padding: 30px 28px;">
+                        <p style="font-size: 15px; color: #1e293b; margin-top: 0;">Dear <strong>{employee_name}</strong>,</p>
+                        <p style="font-size: 14px; color: #475569; line-height: 1.6;">Here is a copy of your recent conversation with the Germane Media Policy AI Assistant:</p>
+                        
+                        <div style="margin-top: 20px; margin-bottom: 25px;">
+                            {chat_html}
+                        </div>
+
+                        <p style="font-size: 14px; color: #475569;">Warm regards,<br><strong>Team The Germane Media 💙</strong></p>
+                    </div>
+
+                    <!-- FOOTER -->
+                    <div style="background-color: #e2e8f0; padding: 16px; text-align: center; border-top: 1px solid #cbd5e1;">
+                        <p style="margin: 0; font-size: 12px; color: #64748b;">
+                            This is an automated policy transcript sent with lots of love and a touch of code. 😊
+                        </p>
+                    </div>
+
+                </div>
+            </body>
+            </html>
+            """
             
-            body += f"\nBest regards,\nGermane Media HR Team\nCC: {HR_EMAIL}"
-            msg.attach(MIMEText(body, 'plain'))
+            msg.attach(MIMEText(html_content, 'html'))
             
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
@@ -158,44 +198,101 @@ def send_transcript_email(employee_email, employee_name, chat_history):
             return False
     return False
 
-# --- CALENDAR INVITE & EMAIL NOTIFICATION FUNCTION ---
+# --- ATTRACTIVE HR MEETING EMAIL & CALENDAR SYNC ---
 def send_hr_meeting_email(employee_name, employee_email, meeting_date, time_slot, subject_reason):
     if "SMTP_USER" in st.secrets and "SMTP_PASSWORD" in st.secrets:
         try:
             sender_email = st.secrets["SMTP_USER"]
             sender_password = st.secrets["SMTP_PASSWORD"]
             
-            # Calculate start and end datetimes
+            # Format dates for Google Calendar link & ICS
             dt_start = datetime.strptime(f"{meeting_date} {time_slot}", "%Y-%m-%d %I:%M %p")
             dt_end = dt_start + timedelta(minutes=30)
             
-            dt_start_str = dt_start.strftime("%Y%m%dT%H%M%S")
-            dt_end_str = dt_end.strftime("%Y%m%dT%H%M%S")
+            gcal_start = dt_start.strftime("%Y%m%dT%H%M%S")
+            gcal_end = dt_end.strftime("%Y%m%dT%H%M%S")
             dt_stamp_str = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
             event_uid = f"{uuid.uuid4()}@thegermanemedia.com"
             
+            # Google Calendar One-Click Link
+            title_encoded = urllib.parse.quote(f"HR Meeting: {subject_reason} - {employee_name}")
+            details_encoded = urllib.parse.quote(f"Meeting Reason: {subject_reason}\n\nParticipants:\n- {employee_name} ({employee_email})\n- Tarang ({HR_EMAIL})")
+            gcal_link = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={title_encoded}&dates={gcal_start}/{gcal_end}&details={details_encoded}&add={HR_EMAIL}&add={employee_email}"
+
             msg = MIMEMultipart('mixed')
-            msg['From'] = sender_email
+            msg['From'] = f"Germane Media HR <{sender_email}>"
             msg['To'] = employee_email
             msg['Cc'] = HR_EMAIL
-            msg['Subject'] = f"📅 HR Meeting Invitation: {subject_reason} - {employee_name}"
+            msg['Subject'] = f"📅 HR Discussion Scheduled: {subject_reason} - {employee_name}"
             
-            # Plain Text Body
-            body = f"""Hello {employee_name} and Tarang (HR),
+            html_body = f"""
+            <!DOCTYPE html>
+            <html>
+            <body style="margin: 0; padding: 20px; background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    
+                    <!-- HEADER BANNER -->
+                    <div style="background-color: #002B49; padding: 28px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
+                            📅 Meeting Scheduled with HR!
+                        </h1>
+                        <p style="color: #94a3b8; margin: 6px 0 0 0; font-size: 13px;">Germane Media LLC</p>
+                    </div>
 
-An HR discussion meeting has been scheduled via the Germane Media Policy AI Assistant.
+                    <!-- BODY CONTENT -->
+                    <div style="padding: 30px 28px;">
+                        <p style="font-size: 15px; color: #1e293b; margin-top: 0;">Dear <strong>{employee_name}</strong> & <strong>Tarang (HR)</strong>,</p>
+                        <p style="font-size: 14px; color: #475569; line-height: 1.6;">An HR discussion session has been successfully booked via the Policy AI Assistant.</p>
+                        
+                        <!-- DETAILS CARD -->
+                        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 20px 0;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #334155;">
+                                <tr>
+                                    <td style="padding: 6px 0; font-weight: 600; width: 35%;">Reason / Subject:</td>
+                                    <td style="padding: 6px 0; color: #0284c7; font-weight: 600;">{subject_reason}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 0; font-weight: 600;">Date:</td>
+                                    <td style="padding: 6px 0;">{meeting_date}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 0; font-weight: 600;">Time Slot:</td>
+                                    <td style="padding: 6px 0;">{time_slot} (30 mins)</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 0; font-weight: 600;">Employee:</td>
+                                    <td style="padding: 6px 0;">{employee_name} ({employee_email})</td>
+                                </tr>
+                            </table>
+                        </div>
 
-📌 Meeting Details:
-- Reason / Subject: {subject_reason}
-- Date: {meeting_date}
-- Time: {time_slot} (30 Minutes)
-- Participants: {employee_name} ({employee_email}) & Tarang ({HR_EMAIL})
+                        <!-- ONE CLICK GOOGLE CALENDAR BUTTON -->
+                        <div style="text-align: center; margin: 28px 0;">
+                            <a href="{gcal_link}" target="_blank" style="background-color: #002B49; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; box-shadow: 0 2px 6px rgba(0,43,73,0.3);">
+                                📅 Add to Google Calendar
+                            </a>
+                        </div>
 
-An interactive calendar invite has been attached to this email and will automatically sync with your Google Calendar.
-"""
-            msg.attach(MIMEText(body, 'plain'))
+                        <p style="font-size: 13px; color: #64748b; text-align: center; margin-bottom: 25px;">
+                            <em>Click the button above to automatically place this event directly onto your Google Calendar.</em>
+                        </p>
+
+                        <p style="font-size: 14px; color: #475569; margin-bottom: 0;">Warm wishes,<br><strong>Team The Germane Media 💙</strong></p>
+                    </div>
+
+                    <!-- FOOTER -->
+                    <div style="background-color: #e2e8f0; padding: 16px; text-align: center; border-top: 1px solid #cbd5e1;">
+                        <p style="margin: 0; font-size: 12px; color: #64748b;">
+                            This is an automated HR meeting notification sent with lots of love and a touch of code. 😊
+                        </p>
+                    </div>
+
+                </div>
+            </body>
+            </html>
+            """
             
-            # iCalendar (.ics) Attachment Format for Automatic Calendar Sync
+            # iCalendar Attachment
             ics_content = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Germane Media LLC//HR Assistant//EN
@@ -204,10 +301,10 @@ METHOD:REQUEST
 BEGIN:VEVENT
 UID:{event_uid}
 DTSTAMP:{dt_stamp_str}
-DTSTART:{dt_start_str}
-DTEND:{dt_end_str}
+DTSTART:{gcal_start}
+DTEND:{gcal_end}
 SUMMARY:HR Meeting: {subject_reason}
-DESCRIPTION:HR Meeting scheduled via Policy AI Assistant.\\n\\nEmployee: {employee_name} ({employee_email})\\nReason: {subject_reason}
+DESCRIPTION:HR Discussion scheduled via Policy AI Assistant.\\n\\nReason: {subject_reason}\\nEmployee: {employee_name} ({employee_email})
 ORGANIZER;CN="Germane Media HR":mailto:{HR_EMAIL}
 ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN="Tarang (HR)":mailto:{HR_EMAIL}
 ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN="{employee_name}":mailto:{employee_email}
@@ -215,6 +312,10 @@ STATUS:CONFIRMED
 SEQUENCE:0
 END:VEVENT
 END:VCALENDAR"""
+
+            msg_alternative = MIMEMultipart('alternative')
+            msg_alternative.attach(MIMEText(html_body, 'html'))
+            msg.attach(msg_alternative)
 
             ics_part = MIMEText(ics_content, 'calendar; method=REQUEST')
             ics_part.add_header('Content-Disposition', 'inline; filename="invite.ics"')
@@ -232,11 +333,11 @@ END:VCALENDAR"""
             return False
     return False
 
-# --- SESSION STATE FOR BOOKED SLOTS ---
+# --- SESSION STATE ---
 if "booked_slots" not in st.session_state:
     st.session_state.booked_slots = set()
 
-# --- SIDEBAR NAVIGATION & BRANDING ---
+# --- SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.markdown('<div class="sidebar-header-title">Germane Media LLC</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-header-sub">Psychology of Advertising</div>', unsafe_allow_html=True)
@@ -405,7 +506,7 @@ with col_right:
                 slot_key = f"{selected_date}_{selected_slot}"
                 st.session_state.booked_slots.add(slot_key)
                 
-                # Send email notification + .ics calendar event to both HR and Employee
+                # Send email notification with HTML template and Calendar Link
                 if send_hr_meeting_email(
                     st.session_state.emp_name, 
                     st.session_state.emp_email, 
@@ -414,7 +515,7 @@ with col_right:
                     meeting_subject
                 ):
                     st.success(f"✅ Meeting booked for **{selected_date}** at **{selected_slot}**!")
-                    st.info(f"📧 Interactive calendar invite sent to **{st.session_state.emp_email}** and **{HR_EMAIL}**!")
+                    st.info(f"📧 Styled invitation email sent to **{st.session_state.emp_email}** and **{HR_EMAIL}** with a Google Calendar button!")
     else:
         st.error("❌ No slots available for this date. Please pick another date.")
         
