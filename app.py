@@ -488,7 +488,7 @@ if not st.user.is_logged_in:
                 </div>
             </div>
         """)
-        st.markdown(left_html, unsafe_allow_html=True)
+        st.html(left_html)
 
     with right_col:
         # A real Streamlit container keeps the complete login card together,
@@ -514,7 +514,7 @@ if not st.user.is_logged_in:
                     <div class="signin-label">Sign in with your company account</div>
                 </div>
             """)
-            st.markdown(card_html, unsafe_allow_html=True)
+            st.html(card_html)
 
             if st.button(
                 "G   Sign in with Google",
@@ -542,9 +542,9 @@ if not st.user.is_logged_in:
                     Protected by Google Workspace Authentication
                 </div>
             """)
-            st.markdown(bottom_html, unsafe_allow_html=True)
+            st.html(bottom_html)
 
-    st.markdown(
+    st.html(
         textwrap.dedent("""
             <div class="page-footer">
                 🛡 Secure • Private • Trusted
@@ -553,8 +553,7 @@ if not st.user.is_logged_in:
                 &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
                 Internal Use Only
             </div>
-        """),
-        unsafe_allow_html=True,
+        """)
     )
 
     st.stop()
