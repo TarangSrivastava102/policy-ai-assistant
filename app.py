@@ -4,7 +4,8 @@ from pypdf import PdfReader
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import date, time, datetime
+from datetime import date
+import urllib.parse
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -16,43 +17,71 @@ st.set_page_config(
 
 # --- HR CONFIGURATION ---
 HR_EMAIL = "tarang@thegermanemedia.com"
-GOOGLE_CHAT_LINK = "https://chat.google.com/"
+DIRECT_GOOGLE_CHAT_HR = f"https://chat.google.com/dm/{HR_EMAIL}"
 
-# --- CUSTOM CSS (SIDEBAR LOGO & STICKY RIGHT COLUMN) ---
+# --- PROFESSIONAL UI CUSTOM CSS ---
 st.markdown("""
 <style>
-    /* Prevent long chat history from pushing down right sidebar elements */
+    /* Global Typography */
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Fixed Sticky Right Column */
     [data-testid="stColumn"]:nth-child(2) {
         position: sticky;
         top: 2rem;
         align-self: flex-start;
-        max-height: 90vh;
+        max-height: 92vh;
         overflow-y: auto;
+        padding-right: 5px;
     }
-    
-    /* Source citation box styling */
+
+    /* Sidebar Header & Branding */
+    .sidebar-header-title {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 2px;
+        color: #ffffff;
+    }
+    .sidebar-header-sub {
+        font-size: 12px;
+        color: #94a3b8;
+        font-style: italic;
+        margin-bottom: 12px;
+    }
+
+    /* Source Citation Card */
     .source-box {
-        background-color: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.04);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        padding: 8px 12px;
+        border-left: 3px solid #3b82f6;
+        border-radius: 6px;
+        padding: 10px 14px;
         font-size: 13px;
-        margin-top: 8px;
+        margin-top: 10px;
+        color: #cbd5e1;
     }
-    
-    /* Privacy badge styling */
+
+    /* Privacy & Info Badges */
     .badge-safe {
-        background-color: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
-        padding: 12px;
+        padding: 14px;
         text-align: left;
-        margin-top: 20px;
+        margin-top: 18px;
     }
-    
+
     .stButton>button {
         border-radius: 8px;
         font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .stButton>button:hover {
+        border-color: #3b82f6;
+        color: #3b82f6;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -95,7 +124,7 @@ def query_gemini_ai(prompt):
 
     raise Exception(f"Could not fetch AI response: {last_error}")
 
-# --- EMAIL SENDER FUNCTION ---
+# --- EMAIL TRANSCRIPT SENDER FUNCTION ---
 def send_transcript_email(employee_email, employee_name, chat_history):
     if "SMTP_USER" in st.secrets and "SMTP_PASSWORD" in st.secrets:
         try:
@@ -128,33 +157,74 @@ def send_transcript_email(employee_email, employee_name, chat_history):
             return False
     return False
 
-# --- SESSION STATE INITIALIZATION FOR BOOKINGS ---
+# --- MEETING NOTIFICATION EMAIL TO HR ---
+def send_hr_meeting_email(employee_name, employee_email, meeting_date, time_slot, subject_reason):
+    if "SMTP_USER" in st.secrets and "SMTP_PASSWORD" in st.secrets:
+        try:
+            sender_email = st.secrets["SMTP_USER"]
+            sender_password = st.secrets["SMTP_PASSWORD"]
+            
+            msg = MIMEMultipart()
+            msg['From'] = sender_email
+            msg['To'] = HR_EMAIL
+            msg['Cc'] = employee_email
+            msg['Subject'] = f"📅 New Meeting Scheduled: {subject_reason} - {employee_name}"
+            
+            body = f"""Hello Tarang (HR),
+
+{employee_name} ({employee_email}) has scheduled an HR meeting with you via Policy AI Assistant.
+
+📌 Meeting Details:
+- Employee Name: {employee_name}
+- Employee Email: {employee_email}
+- Date: {meeting_date}
+- Time Slot: {time_slot}
+- Mandatory Subject/Reason: {subject_reason}
+
+Best regards,
+Germane Media Policy AI Assistant
+"""
+            msg.attach(MIMEText(body, 'plain'))
+            
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(sender_email, sender_password)
+            recipients = [HR_EMAIL, employee_email]
+            server.sendmail(sender_email, recipients, msg.as_string())
+            server.quit()
+            return True
+        except Exception as e:
+            st.error(f"Notification Error: {e}")
+            return False
+    return False
+
+# --- SESSION STATE FOR BOOKED SLOTS ---
 if "booked_slots" not in st.session_state:
     st.session_state.booked_slots = set()
 
-# --- SIDEBAR COMPONENT ---
+# --- SIDEBAR NAVIGATION & BRANDING ---
 with st.sidebar:
-    # --- GERMANE MEDIA LOGO ---
-    # You can upload a file named 'logo.png' to your GitHub repo root, 
-    # or paste your hosted image URL inside st.image below:
+    st.markdown('<div class="sidebar-header-title">Germane Media LLC</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-header-sub">Psychology of Advertising</div>', unsafe_allow_html=True)
+    
     try:
-        st.image("logo.png", use_container_width=True)
+        st.image("logo.png", width=130)
     except Exception:
-        st.title("🏢 GERMANE MEDIA LLC")
+        pass
         
-    st.caption("*Psychology of Advertising*")
     st.divider()
     
     st.markdown("💬 **Chat with Policy AI**")
     st.markdown("📄 Company Policies")
-    st.markdown("💬 Contact HR")
+    
+    st.link_button("💬 Chat with HR Directly", DIRECT_GOOGLE_CHAT_HR, use_container_width=True)
     
     st.divider()
     
     st.markdown("""
     <div class="badge-safe">
-        🔒 <b>Your Data is Safe</b><br/>
-        <small>Your conversations are confidential and visible only to HR.</small>
+        🔒 <b>Confidential & Safe</b><br/>
+        <small style="color:#94a3b8;">Conversations are encrypted and accessible only by HR.</small>
     </div>
     """, unsafe_allow_html=True)
     
@@ -182,14 +252,13 @@ if not st.session_state.user_authenticated:
             st.error("Please enter a valid name and email address.")
     st.stop()
 
-# --- MAIN LAYOUT ---
-col_main, col_right = st.columns([3, 1])
+# --- MAIN CHAT LAYOUT ---
+col_main, col_right = st.columns([3, 1.1])
 
 with col_main:
     st.title("Policy AI Assistant ✨")
-    st.caption("Your smart guide to Germane Media LLC policies.")
+    st.caption("Your intelligent guide to Germane Media LLC workplace policies.")
     
-    # Render Chat History
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -206,10 +275,9 @@ with col_main:
                         st.toast("Thank you for your feedback!")
                 with col_unsat:
                     if st.button("👎 Not Satisfied", key=f"unsat_{idx}"):
-                        st.toast("We're sorry! Please use the right sidebar to schedule a call with HR.")
+                        st.toast("We're sorry! Please schedule a direct call with HR using the right panel.")
 
-    # User Input Field
-    user_query = st.chat_input("Type your question here...")
+    user_query = st.chat_input("Ask any policy question...")
     
     if user_query:
         st.session_state.messages.append({"role": "user", "content": user_query})
@@ -247,7 +315,6 @@ with col_main:
 
     st.divider()
     
-    # Email Transcript Section
     if st.button(f"📧 Send Chat Transcript to My Email ({st.session_state.emp_email})"):
         if "SMTP_USER" not in st.secrets or "SMTP_PASSWORD" not in st.secrets:
             st.warning("⚠️ Email credentials are not configured in Streamlit Secrets yet.")
@@ -256,9 +323,9 @@ with col_main:
                 if send_transcript_email(st.session_state.emp_email, st.session_state.emp_name, st.session_state.messages):
                     st.success(f"Transcript sent to **{st.session_state.emp_email}** (CC'd to {HR_EMAIL})!")
                 else:
-                    st.error("Failed to send email. Please verify your Gmail App Password setup in Streamlit Secrets.")
+                    st.error("Failed to send email. Please check your SMTP settings.")
 
-# --- RIGHT SIDEBAR (STICKY PANEL) ---
+# --- RIGHT SIDEBAR (STICKY SCHEDULER & QUICK TOPICS) ---
 with col_right:
     st.markdown(f"**👤 {st.session_state.emp_name}**")
     st.caption(st.session_state.emp_email)
@@ -276,7 +343,7 @@ with col_right:
             
     st.divider()
     
-    # INTERACTIVE HR MEETING SCHEDULER
+    # INTERACTIVE HR MEETING SCHEDULER WITH MANDATORY SUBJECT
     st.markdown("### 📅 **Schedule Meeting with HR**")
     
     selected_date = st.date_input("Select Date", min_value=date.today())
@@ -294,13 +361,36 @@ with col_right:
     if available_slots:
         selected_slot = st.selectbox("Available Time Slots", available_slots)
         
-        if st.button("Confirm Meeting Slot", type="primary", use_container_width=True):
-            slot_key = f"{selected_date}_{selected_slot}"
-            st.session_state.booked_slots.add(slot_key)
-            st.success(f"✅ Meeting booked with HR for **{selected_date}** at **{selected_slot}**!")
-            st.info(f"Notification sent to HR ({HR_EMAIL}).")
+        # MANDATORY SUBJECT FIELD
+        meeting_subject = st.text_input("Meeting Subject / Reason *", placeholder="e.g., Leave approval discussion")
+        
+        # Calendar Link Helper
+        encoded_title = urllib.parse.quote(f"HR Meeting: {meeting_subject if meeting_subject else 'Discussion'} - {st.session_state.emp_name}")
+        encoded_details = urllib.parse.quote(f"Reason: {meeting_subject}\nEmployee: {st.session_state.emp_name} ({st.session_state.emp_email})")
+        date_str = selected_date.strftime("%Y%m%d")
+        gcal_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={encoded_title}&details={encoded_details}&add={HR_EMAIL}&dates={date_str}T100000Z/{date_str}T103000Z"
+
+        if st.button("Confirm Meeting & Send Request", type="primary", use_container_width=True):
+            if not meeting_subject.strip():
+                st.error("⚠️ Please enter a subject/reason for the meeting before confirming.")
+            else:
+                slot_key = f"{selected_date}_{selected_slot}"
+                st.session_state.booked_slots.add(slot_key)
+                
+                # Send email notification to HR
+                send_hr_meeting_email(
+                    st.session_state.emp_name, 
+                    st.session_state.emp_email, 
+                    selected_date, 
+                    selected_slot, 
+                    meeting_subject
+                )
+                
+                st.success(f"✅ Meeting booked for **{selected_date}** at **{selected_slot}**!")
+                st.info(f"📧 Notification email sent to HR ({HR_EMAIL}).")
+                st.link_button("📅 Add to Google Calendar", gcal_url, use_container_width=True)
     else:
         st.error("❌ No slots available for this date. Please pick another date.")
         
     st.divider()
-    st.link_button("💬 Chat on Google Chat", GOOGLE_CHAT_LINK, use_container_width=True)
+    st.link_button("💬 Chat with HR on Google Chat", DIRECT_GOOGLE_CHAT_HR, use_container_width=True)
