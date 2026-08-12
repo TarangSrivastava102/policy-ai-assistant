@@ -30,7 +30,7 @@ DIRECT_GOOGLE_CHAT_HR = (
 
 
 # ============================================================
-# CUSTOM CORPORATE UI
+# CORPORATE UI
 # ============================================================
 
 st.markdown(
@@ -140,7 +140,7 @@ st.markdown(
 
 
 # ============================================================
-# GEMINI API - NEW GOOGLE GENAI SDK
+# GEMINI API
 # ============================================================
 
 if "GEMINI_API_KEY" not in st.secrets:
@@ -280,7 +280,7 @@ EMPLOYEE QUESTION:
     try:
 
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=system_prompt
         )
 
@@ -301,7 +301,7 @@ EMPLOYEE QUESTION:
 
 
 # ============================================================
-# GOOGLE CALENDAR LINK
+# GOOGLE CALENDAR
 # ============================================================
 
 def generate_gcal_link(
