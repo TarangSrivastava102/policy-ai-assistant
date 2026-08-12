@@ -280,7 +280,7 @@ EMPLOYEE QUESTION:
     try:
 
         response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-2.5-flash",
             contents=system_prompt
         )
 
