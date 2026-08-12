@@ -103,7 +103,7 @@ def send_transcript_email(employee_email, employee_name, chat_history):
 
 # --- SIDEBAR COMPONENT ---
 with st.sidebar:
-    st.image("https://via.placeholder.com/150x50.png?text=GERMANE+MEDIA", use_column_width=True)
+    st.image("https://via.placeholder.com/150x50.png?text=GERMANE+MEDIA", use_container_width=True)
     st.markdown("### **GERMANE MEDIA LLC**\n*Psychology of Advertising*")
     st.divider()
     
