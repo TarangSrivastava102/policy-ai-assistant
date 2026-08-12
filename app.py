@@ -188,8 +188,25 @@ with col_main:
             User Query: {user_query}
             """
             
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
+            response = None
+candidate_models = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-pro"
+]
+
+for model_name in candidate_models:
+    try:
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt)
+        if response:
+            break
+    except Exception:
+        continue
+
+if not response:
+    raise Exception("Could not establish connection with Gemini models. Please check your GEMINI_API_KEY in Streamlit Secrets.")
             
             st.session_state.messages.append({
                 "role": "assistant", 
