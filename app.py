@@ -1,6 +1,7 @@
 import streamlit as st
 from pathlib import Path
 import base64
+import textwrap
 
 # ============================================================
 # PAGE CONFIG
@@ -270,13 +271,13 @@ if not st.user.is_logged_in:
 
         /* ---------- Real Streamlit login button ---------- */
         div[data-testid="stButton"] {
-            width: 100%;
+            width: 100% !important;
             display: flex;
             justify-content: center;
             margin: 0;
         }
 
-        div[data-testid="stButton"] > button {
+        div[data-testid="stButton"] button {
             width: 100% !important;
             min-height: 54px !important;
             border-radius: 8px !important;
@@ -288,7 +289,7 @@ if not st.user.is_logged_in:
             box-shadow: none !important;
         }
 
-        div[data-testid="stButton"] > button:hover {
+        div[data-testid="stButton"] button:hover {
             border-color: #5538d8 !important;
             background: linear-gradient(90deg, #5b3fe1, #6840e6) !important;
         }
@@ -405,13 +406,12 @@ if not st.user.is_logged_in:
         unsafe_allow_html=True,
     )
 
-    # Two-column page. The actual login button remains a Streamlit button
+    # Two-column page. The actual login button remains a Streamlit widget
     # so st.login() continues to work normally.
     left_col, right_col = st.columns([1.03, 0.97], gap="large")
 
     with left_col:
-        st.markdown(
-            f"""
+        left_html = textwrap.dedent(f"""
             <div class="left-panel">
                 <div class="brand">
                     {logo_html}
@@ -487,72 +487,73 @@ if not st.user.is_logged_in:
                     </svg>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        """)
+        st.markdown(left_html, unsafe_allow_html=True)
 
     with right_col:
-        st.markdown(
-            """
-            <div class="login-card-anchor"></div>
-            <div class="login-card">
-                <div class="lock-circle">🔒</div>
+        # A real Streamlit container keeps the complete login card together,
+        # while the HTML inside it is safely dedented so it is rendered as HTML.
+        with st.container(border=True):
+            card_html = textwrap.dedent("""
+                <div class="login-card">
+                    <div class="lock-circle">🔒</div>
 
-                <div class="card-title">Welcome Back!</div>
-                <div class="card-subtitle">
-                    Sign in to access the GM Policy Assistant
+                    <div class="card-title">Welcome Back!</div>
+                    <div class="card-subtitle">
+                        Sign in to access the GM Policy Assistant
+                    </div>
+
+                    <div class="restricted">
+                        <div class="restricted-icon">🔒</div>
+                        <div>
+                            This portal is restricted to active
+                            Germane Media LLC employees.
+                        </div>
+                    </div>
+
+                    <div class="signin-label">Sign in with your company account</div>
                 </div>
+            """)
+            st.markdown(card_html, unsafe_allow_html=True)
 
-                <div class="restricted">
-                    <div class="restricted-icon">🔒</div>
+            if st.button(
+                "G   Sign in with Google",
+                key="login_button",
+                type="primary",
+                use_container_width=True,
+            ):
+                st.login()
+
+            bottom_html = textwrap.dedent("""
+                <div class="divider">OR</div>
+
+                <div class="workspace-note">
+                    <div class="workspace-icon">▦</div>
                     <div>
-                        This portal is restricted to active
-                        Germane Media LLC employees.
+                        Please use your official
+                        <strong>@thegermanemedia.com Google Workspace account.</strong><br>
+                        Your policy conversations are associated with your
+                        authenticated company account.
                     </div>
                 </div>
 
-                <div class="signin-label">Sign in with your company account</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # This remains a real Streamlit widget so st.login() works normally.
-        if st.button("G   Sign in with Google", key="login_button", type="primary"):
-            st.login()
-
-        st.markdown(
-            """
-            <div class="divider">OR</div>
-
-            <div class="workspace-note">
-                <div class="workspace-icon">▦</div>
-                <div>
-                    Please use your official
-                    <strong>@thegermanemedia.com Google Workspace account.</strong><br>
-                    Your policy conversations are associated with your
-                    authenticated company account.
+                <div class="protected">
+                    <span class="protected-icon">🛡</span>
+                    Protected by Google Workspace Authentication
                 </div>
-            </div>
-
-            <div class="protected">
-                <span class="protected-icon">🛡</span>
-                Protected by Google Workspace Authentication
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            """)
+            st.markdown(bottom_html, unsafe_allow_html=True)
 
     st.markdown(
-        """
-        <div class="page-footer">
-            🛡 Secure • Private • Trusted
-            &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-            © 2026 Germane Media LLC. All rights reserved.
-            &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-            Internal Use Only
-        </div>
-        """,
+        textwrap.dedent("""
+            <div class="page-footer">
+                🛡 Secure • Private • Trusted
+                &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+                © 2026 Germane Media LLC. All rights reserved.
+                &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+                Internal Use Only
+            </div>
+        """),
         unsafe_allow_html=True,
     )
 
