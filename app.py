@@ -12,10 +12,6 @@ if not st.user.is_logged_in:
         """
         <style>
 
-        /* ====================================================
-           PAGE
-        ==================================================== */
-
         .stApp {
             background: #f7f8ff;
         }
@@ -28,15 +24,13 @@ if not st.user.is_logged_in:
             padding-right: 3rem !important;
         }
 
-        /* Remove Streamlit default spacing */
         div[data-testid="stVerticalBlock"] {
             gap: 0.5rem;
         }
 
-
         /* ====================================================
            TOP BAR
-        ==================================================== */
+           ==================================================== */
 
         .top-bar {
             height: 68px;
@@ -44,13 +38,10 @@ if not st.user.is_logged_in:
             margin-left: -3rem;
             margin-right: -3rem;
             margin-top: -1rem;
-
             display: flex;
             align-items: center;
             justify-content: flex-end;
-
             padding: 0 40px;
-
             color: white;
             font-family: Arial, sans-serif;
         }
@@ -65,7 +56,6 @@ if not st.user.is_logged_in:
             font-size: 20px;
         }
 
-
         /* ====================================================
            MAIN LOGIN AREA
            ==================================================== */
@@ -75,7 +65,6 @@ if not st.user.is_logged_in:
             padding-top: 78px;
             padding-bottom: 40px;
         }
-
 
         /* ====================================================
            LEFT SIDE
@@ -97,23 +86,14 @@ if not st.user.is_logged_in:
         .gm-logo {
             width: 58px;
             height: 58px;
-
-            background: linear-gradient(
-                135deg,
-                #6448ee,
-                #8b5cf6
-            );
-
+            background: linear-gradient(135deg, #6448ee, #8b5cf6);
             border-radius: 15px;
-
             display: flex;
             align-items: center;
             justify-content: center;
-
             color: white;
             font-size: 30px;
             font-weight: 800;
-
             box-shadow: 0 10px 25px rgba(99, 72, 238, 0.25);
         }
 
@@ -154,7 +134,6 @@ if not st.user.is_logged_in:
             margin-bottom: 35px;
         }
 
-
         /* ====================================================
            FEATURES
            ==================================================== */
@@ -168,53 +147,39 @@ if not st.user.is_logged_in:
 
         .feature-card {
             background: white;
-
             border: 1px solid #e7e9f2;
             border-radius: 15px;
-
             padding: 20px;
-
             display: flex;
             gap: 15px;
-
             box-shadow: 0 5px 20px rgba(25, 30, 50, 0.035);
         }
 
         .feature-icon {
             width: 42px;
             height: 42px;
-
             min-width: 42px;
-
             border-radius: 11px;
-
             background: #f0edff;
-
             display: flex;
             align-items: center;
             justify-content: center;
-
             font-size: 20px;
         }
 
         .feature-content h4 {
             margin: 0 0 7px 0;
-
             font-size: 15px;
             font-weight: 750;
-
             color: #18233b;
         }
 
         .feature-content p {
             margin: 0;
-
             font-size: 13px;
             line-height: 1.55;
-
             color: #747b8b;
         }
-
 
         /* ====================================================
            RIGHT LOGIN PANEL
@@ -229,30 +194,21 @@ if not st.user.is_logged_in:
         .login-card {
             width: 100%;
             max-width: 610px;
-
             background: transparent;
-
             padding: 20px 25px 30px 25px;
-
             text-align: center;
         }
 
         .lock-circle {
             width: 115px;
             height: 115px;
-
             border-radius: 50%;
-
             background: #f0edff;
-
             margin: 0 auto 30px auto;
-
             display: flex;
             align-items: center;
             justify-content: center;
-
             font-size: 42px;
-
             box-shadow: inset 0 0 0 1px #ebe6ff;
         }
 
@@ -269,35 +225,24 @@ if not st.user.is_logged_in:
             margin-bottom: 35px;
         }
 
-
         /* ====================================================
            RESTRICTED BOX
            ==================================================== */
 
         .restricted-box {
             width: 100%;
-
             box-sizing: border-box;
-
             border: 1px solid #ddd6fe;
             background: #fbfaff;
-
             border-radius: 15px;
-
             padding: 21px 25px;
-
             display: flex;
             align-items: center;
-
             text-align: left;
-
             gap: 16px;
-
             color: #4938a8;
-
             font-size: 14px;
             font-weight: 700;
-
             margin-bottom: 35px;
         }
 
@@ -305,23 +250,15 @@ if not st.user.is_logged_in:
             font-size: 23px;
         }
 
-
-        /* ====================================================
-           SIGN-IN HEADING
-           ==================================================== */
-
         .signin-heading {
             font-size: 17px;
             font-weight: 750;
-
             color: #172033;
-
             margin-bottom: 18px;
         }
 
-
         /* ====================================================
-           STREAMLIT GOOGLE BUTTON
+           GOOGLE LOGIN BUTTON
            ==================================================== */
 
         div[data-testid="stButton"] {
@@ -330,40 +267,21 @@ if not st.user.is_logged_in:
 
         div[data-testid="stButton"] button {
             width: 100% !important;
-
             min-height: 64px !important;
-
             border-radius: 13px !important;
-
             border: none !important;
-
-            background: linear-gradient(
-                90deg,
-                #6547ed,
-                #7048ed
-            ) !important;
-
+            background: linear-gradient(90deg, #6547ed, #7048ed) !important;
             color: white !important;
-
             font-size: 17px !important;
-
             font-weight: 700 !important;
-
-            box-shadow:
-                0 12px 25px
-                rgba(100, 72, 237, 0.20) !important;
-
+            box-shadow: 0 12px 25px rgba(100, 72, 237, 0.20) !important;
             transition: all 0.2s ease !important;
         }
 
         div[data-testid="stButton"] button:hover {
             transform: translateY(-2px);
-
-            box-shadow:
-                0 15px 30px
-                rgba(100, 72, 237, 0.28) !important;
+            box-shadow: 0 15px 30px rgba(100, 72, 237, 0.28) !important;
         }
-
 
         /* ====================================================
            SECURITY NOTE
@@ -371,25 +289,15 @@ if not st.user.is_logged_in:
 
         .security-note {
             width: 100%;
-
             box-sizing: border-box;
-
             margin-top: 25px;
-
             padding: 20px 22px;
-
             background: white;
-
             border: 1px solid #e5e7ef;
-
             border-radius: 14px;
-
             text-align: left;
-
             color: #667085;
-
             font-size: 14px;
-
             line-height: 1.6;
         }
 
@@ -397,19 +305,11 @@ if not st.user.is_logged_in:
             color: #475467;
         }
 
-
-        /* ====================================================
-           SECURITY FOOTER
-           ==================================================== */
-
         .security-footer {
             margin-top: 25px;
-
             color: #8a91a2;
-
             font-size: 13px;
         }
-
 
         /* ====================================================
            BOTTOM FOOTER
@@ -417,18 +317,13 @@ if not st.user.is_logged_in:
 
         .landing-footer {
             border-top: 1px solid #e5e7ef;
-
             margin-top: 20px;
             padding-top: 20px;
-
             display: flex;
             justify-content: space-between;
-
             color: #8a91a2;
-
             font-size: 12px;
         }
-
 
         /* ====================================================
            MOBILE
@@ -537,14 +432,11 @@ if not st.user.is_logged_in:
 
                 </div>
 
-
                 <div class="purple-line"></div>
-
 
                 <div class="hero-title">
                     Your Intelligent HR Policy Companion
                 </div>
-
 
                 <div class="hero-description">
                     Get instant, accurate answers to your policy questions,
@@ -552,9 +444,7 @@ if not st.user.is_logged_in:
                     for personalized support — anytime, anywhere.
                 </div>
 
-
                 <div class="feature-grid">
-
 
                     <div class="feature-card">
 
@@ -578,7 +468,6 @@ if not st.user.is_logged_in:
 
                     </div>
 
-
                     <div class="feature-card">
 
                         <div class="feature-icon">
@@ -601,7 +490,6 @@ if not st.user.is_logged_in:
 
                     </div>
 
-
                     <div class="feature-card">
 
                         <div class="feature-icon">
@@ -623,7 +511,6 @@ if not st.user.is_logged_in:
 
                     </div>
 
-
                     <div class="feature-card">
 
                         <div class="feature-icon">
@@ -644,7 +531,6 @@ if not st.user.is_logged_in:
                         </div>
 
                     </div>
-
 
                 </div>
 
@@ -678,7 +564,6 @@ if not st.user.is_logged_in:
                         Sign in to access the GM Policy Assistant
                     </div>
 
-
                     <div class="restricted-box">
 
                         <div class="restricted-icon">
@@ -692,7 +577,6 @@ if not st.user.is_logged_in:
 
                     </div>
 
-
                     <div class="signin-heading">
                         Sign in with your company account
                     </div>
@@ -705,9 +589,9 @@ if not st.user.is_logged_in:
         )
 
 
-        # ----------------------------------------------------
-        # REAL STREAMLIT LOGIN BUTTON
-        # ----------------------------------------------------
+        # ====================================================
+        # GOOGLE LOGIN BUTTON
+        # ====================================================
 
         login_button = st.button(
             "🔐  Sign in with Google",
@@ -717,12 +601,12 @@ if not st.user.is_logged_in:
         )
 
         if login_button:
-            st.login()
+            st.login("google")
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # SECURITY INFORMATION
-        # ----------------------------------------------------
+        # ====================================================
 
         st.markdown(
             """
@@ -739,7 +623,6 @@ if not st.user.is_logged_in:
                 with your authenticated company account.
 
             </div>
-
 
             <div class="security-footer">
 
