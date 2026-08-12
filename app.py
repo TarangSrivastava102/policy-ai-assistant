@@ -1,12 +1,28 @@
+import streamlit as st
+from google import genai
+from pypdf import PdfReader
+import smtplib
+from email.message import EmailMessage
+from html import escape
+from pathlib import Path
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
+st.set_page_config(
+    page_title="GM Policy Assistant - Germane Media LLC",
+    page_icon="🔒",
+    layout="wide"
+)
+
+
 # ============================================================
 # GOOGLE AUTHENTICATION
 # ============================================================
 
 if not st.user.is_logged_in:
-
-    # --------------------------------------------------------
-    # LOGIN PAGE CSS
-    # --------------------------------------------------------
 
     st.markdown(
         """
@@ -27,10 +43,6 @@ if not st.user.is_logged_in:
         div[data-testid="stVerticalBlock"] {
             gap: 0.5rem;
         }
-
-        /* ====================================================
-           TOP BAR
-           ==================================================== */
 
         .top-bar {
             height: 68px;
@@ -56,19 +68,11 @@ if not st.user.is_logged_in:
             font-size: 20px;
         }
 
-        /* ====================================================
-           MAIN LOGIN AREA
-           ==================================================== */
-
         .login-wrapper {
             min-height: calc(100vh - 68px);
             padding-top: 78px;
             padding-bottom: 40px;
         }
-
-        /* ====================================================
-           LEFT SIDE
-           ==================================================== */
 
         .left-section {
             padding: 35px 45px 30px 25px;
@@ -86,7 +90,11 @@ if not st.user.is_logged_in:
         .gm-logo {
             width: 58px;
             height: 58px;
-            background: linear-gradient(135deg, #6448ee, #8b5cf6);
+            background: linear-gradient(
+                135deg,
+                #6448ee,
+                #8b5cf6
+            );
             border-radius: 15px;
             display: flex;
             align-items: center;
@@ -134,10 +142,6 @@ if not st.user.is_logged_in:
             margin-bottom: 35px;
         }
 
-        /* ====================================================
-           FEATURES
-           ==================================================== */
-
         .feature-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -181,10 +185,6 @@ if not st.user.is_logged_in:
             color: #747b8b;
         }
 
-        /* ====================================================
-           RIGHT LOGIN PANEL
-           ==================================================== */
-
         .right-section {
             display: flex;
             justify-content: center;
@@ -225,10 +225,6 @@ if not st.user.is_logged_in:
             margin-bottom: 35px;
         }
 
-        /* ====================================================
-           RESTRICTED BOX
-           ==================================================== */
-
         .restricted-box {
             width: 100%;
             box-sizing: border-box;
@@ -257,10 +253,6 @@ if not st.user.is_logged_in:
             margin-bottom: 18px;
         }
 
-        /* ====================================================
-           GOOGLE LOGIN BUTTON
-           ==================================================== */
-
         div[data-testid="stButton"] {
             width: 100%;
         }
@@ -270,22 +262,25 @@ if not st.user.is_logged_in:
             min-height: 64px !important;
             border-radius: 13px !important;
             border: none !important;
-            background: linear-gradient(90deg, #6547ed, #7048ed) !important;
+            background: linear-gradient(
+                90deg,
+                #6547ed,
+                #7048ed
+            ) !important;
             color: white !important;
             font-size: 17px !important;
             font-weight: 700 !important;
-            box-shadow: 0 12px 25px rgba(100, 72, 237, 0.20) !important;
-            transition: all 0.2s ease !important;
+            box-shadow:
+                0 12px 25px
+                rgba(100, 72, 237, 0.20) !important;
         }
 
         div[data-testid="stButton"] button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 15px 30px rgba(100, 72, 237, 0.28) !important;
+            box-shadow:
+                0 15px 30px
+                rgba(100, 72, 237, 0.28) !important;
         }
-
-        /* ====================================================
-           SECURITY NOTE
-           ==================================================== */
 
         .security-note {
             width: 100%;
@@ -311,10 +306,6 @@ if not st.user.is_logged_in:
             font-size: 13px;
         }
 
-        /* ====================================================
-           BOTTOM FOOTER
-           ==================================================== */
-
         .landing-footer {
             border-top: 1px solid #e5e7ef;
             margin-top: 20px;
@@ -324,10 +315,6 @@ if not st.user.is_logged_in:
             color: #8a91a2;
             font-size: 12px;
         }
-
-        /* ====================================================
-           MOBILE
-           ==================================================== */
 
         @media (max-width: 900px) {
 
@@ -366,13 +353,12 @@ if not st.user.is_logged_in:
 
 
     # ========================================================
-    # TOP NAVIGATION BAR
+    # TOP BAR
     # ========================================================
 
     st.markdown(
         """
         <div class="top-bar">
-
             <div class="top-bar-text">
                 Fork
             </div>
@@ -380,7 +366,6 @@ if not st.user.is_logged_in:
             <div class="github-icon">
                 ◉
             </div>
-
         </div>
         """,
         unsafe_allow_html=True
@@ -388,7 +373,7 @@ if not st.user.is_logged_in:
 
 
     # ========================================================
-    # MAIN TWO COLUMN LAYOUT
+    # MAIN LOGIN AREA
     # ========================================================
 
     st.markdown(
@@ -593,14 +578,12 @@ if not st.user.is_logged_in:
         # GOOGLE LOGIN BUTTON
         # ====================================================
 
-        login_button = st.button(
+        if st.button(
             "🔐  Sign in with Google",
             type="primary",
             width="stretch",
             key="google_login_button"
-        )
-
-        if login_button:
+        ):
             st.login("google")
 
 
@@ -667,7 +650,33 @@ if not st.user.is_logged_in:
 
 
     # ========================================================
-    # STOP EXECUTION UNTIL LOGIN
+    # STOP UNTIL LOGIN
     # ========================================================
 
     st.stop()
+
+
+# ============================================================
+# AFTER SUCCESSFUL LOGIN
+# ============================================================
+
+user_email = st.user.email
+
+if not user_email.lower().endswith("@thegermanemedia.com"):
+
+    st.error(
+        "Access denied. Please sign in using your "
+        "Germane Media LLC Google Workspace account."
+    )
+
+    st.logout()
+    st.stop()
+
+
+# ============================================================
+# YOUR EXISTING POLICY ASSISTANT CODE STARTS HERE
+# ============================================================
+
+st.write("Welcome to GM Policy Assistant")
+
+st.write(f"Signed in as: {user_email}")
