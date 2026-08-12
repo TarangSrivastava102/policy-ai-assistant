@@ -18,36 +18,26 @@ HR_EMAIL = "tarang@thegermanemedia.com"
 GOOGLE_CALENDAR_LINK = "https://calendar.google.com/calendar/u/0/r/eventedit?text=15-Min+HR+Policy+Discussion"
 GOOGLE_CHAT_LINK = "https://chat.google.com/"
 
-# --- STYLING (MATCHING SCREENSHOT DESIGN) ---
+# --- STYLING (THEME FIX) ---
 st.markdown("""
 <style>
-    /* Main container background */
-    .stApp {
-        background-color: #F8F9FA;
-    }
-    /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E9ECEF;
-    }
-    /* Custom Chat Cards */
+    /* Source citation box styling */
     .source-box {
-        background-color: #F1F3F5;
-        border: 1px solid #E9ECEF;
+        background-color: rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(0, 0, 0, 0.1);
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 13px;
-        color: #495057;
         margin-top: 8px;
     }
     .badge-safe {
-        background-color: #E9ECEF;
-        border-radius: 12px;
+        background-color: rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
         padding: 12px;
         text-align: left;
         margin-top: 20px;
     }
-    /* Button Styling */
     .stButton>button {
         border-radius: 8px;
         font-weight: 500;
@@ -97,14 +87,14 @@ def send_transcript_email(employee_email, employee_name, chat_history):
             server.sendmail(sender_email, recipients, msg.as_string())
             server.quit()
             return True
-        except Exception as e:
+        except Exception:
             return False
     return False
 
 # --- SIDEBAR COMPONENT ---
 with st.sidebar:
-    st.image("https://via.placeholder.com/150x50.png?text=GERMANE+MEDIA", use_container_width=True)
-    st.markdown("### **GERMANE MEDIA LLC**\n*Psychology of Advertising*")
+    st.markdown("## 🏢 **GERMANE MEDIA LLC**")
+    st.caption("*Psychology of Advertising*")
     st.divider()
     
     st.markdown("💬 **Chat with Policy AI**")
@@ -118,25 +108,25 @@ with st.sidebar:
     
     st.markdown("""
     <div class="badge-safe">
-        <b>🔒 Your Data is Safe</b><br/>
+        🔒 <b>Your Data is Safe</b><br/>
         <small>Your conversations are confidential and visible only to HR.</small>
     </div>
     """, unsafe_allow_html=True)
     
     st.caption("© Germane Media LLC. All rights reserved.")
 
-# --- LOGIN / AUTHENTICATION MODAL ---
+# --- LOGIN / AUTHENTICATION ---
 if "user_authenticated" not in st.session_state:
     st.session_state.user_authenticated = False
 
 if not st.session_state.user_authenticated:
-    st.subheader("Welcome to Germane Media Policy AI Assistant")
+    st.title("Welcome to Germane Media Policy AI Assistant ✨")
     st.write("Please enter your details to access confidential policy support.")
     
     emp_name = st.text_input("Full Name")
     emp_email = st.text_input("Official Email Address (@thegermanemedia.com)")
     
-    if st.button("Start Chat Session"):
+    if st.button("Start Chat Session", type="primary"):
         if emp_name and emp_email and "@" in emp_email:
             st.session_state.emp_name = emp_name
             st.session_state.emp_email = emp_email
@@ -151,7 +141,7 @@ if not st.session_state.user_authenticated:
 col_main, col_right = st.columns([3, 1])
 
 with col_main:
-    st.markdown("## **Policy AI Assistant** ✨")
+    st.title("Policy AI Assistant ✨")
     st.caption("Your smart guide to Germane Media LLC policies.")
     
     # Render Chat History
@@ -164,7 +154,6 @@ with col_main:
             if "source" in message:
                 st.markdown(f'<div class="source-box">📄 <b>Source:</b> {message["source"]}</div>', unsafe_allow_html=True)
             
-            # Satisfied / Not Satisfied buttons for AI responses
             if message["role"] == "assistant":
                 col_sat, col_unsat, _ = st.columns([1, 1, 4])
                 with col_sat:
@@ -172,17 +161,14 @@ with col_main:
                         st.toast("Thank you for your feedback!")
                 with col_unsat:
                     if st.button("👎 Not Satisfied", key=f"unsat_{idx}"):
-                        st.session_state.show_escalation = True
                         st.toast("We're sorry! Please use the right sidebar to connect directly with HR.")
 
     # User Input Field
     user_query = st.chat_input("Type your question here...")
     
-    # Process Query
     if user_query:
         st.session_state.messages.append({"role": "user", "content": user_query})
         
-        # RAG Logic via Gemini
         try:
             pdf_pages = load_and_index_pdf("GERMANE_MEDIA_LLC_POLICY_DOCUMENT.pdf")
             full_context = "\n\n".join([f"--- PAGE {p['page']} ---\n{p['text']}" for p in pdf_pages])
@@ -205,33 +191,27 @@ with col_main:
             model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(prompt)
             
-            # Simple Page Citation Parser
-            source_info = "Page numbers mentioned in response or consult HR"
-            if "Page" in response.text:
-                source_info = "Referenced from Germane Media Policy Handbook"
-
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": response.text,
-                "source": source_info
+                "source": "Referenced from Germane Media Policy Handbook"
             })
             st.rerun()
             
         except Exception as e:
-            st.error(f"Error connecting to AI engine. Please ensure API Key is valid. Details: {e}")
+            st.error(f"Error connecting to AI engine. Please check API Key settings. Details: {e}")
 
-    # End Chat & Send Email Button
     st.divider()
     if st.button("📧 End Chat & Send Transcript to Email"):
         if send_transcript_email(st.session_state.emp_email, st.session_state.emp_name, st.session_state.messages):
-            st.success(f"Chat transcript successfully sent to {st.session_state.emp_email} and CC'd to {HR_EMAIL}!")
+            st.success(f"Chat transcript sent to {st.session_state.emp_email} and CC'd to {HR_EMAIL}!")
         else:
-            st.info(f"Chat session completed. Transcript copied to HR ({HR_EMAIL}).")
+            st.info(f"Chat session completed. Copy sent to HR ({HR_EMAIL}).")
 
-# --- RIGHT SIDEBAR (QUICK TOPICS & ESCALATION) ---
+# --- RIGHT SIDEBAR ---
 with col_right:
-    # Header Profile
-    st.markdown(f"**👤 {st.session_state.emp_name}**\n\n`< {st.session_state.emp_email} >`", unsafe_allow_html=True)
+    st.markdown(f"**👤 {st.session_state.emp_name}**")
+    st.caption(st.session_state.emp_email)
     st.divider()
     
     st.markdown("⚡ **Quick Topics**")
@@ -246,17 +226,8 @@ with col_right:
             
     st.divider()
     
-    # Escalation Box
     st.markdown("### **Need More Help?**")
-    st.caption("If you didn't find what you were looking for, connect directly with HR:")
+    st.caption("Connect directly with HR:")
     
     st.link_button("📅 Schedule 15-min Call", GOOGLE_CALENDAR_LINK, use_container_width=True)
     st.link_button("💬 Chat on Google Chat", GOOGLE_CHAT_LINK, use_container_width=True)
-    
-    st.divider()
-    st.markdown("""
-    <div style="background-color: #FFF3CD; padding: 10px; border-radius: 6px; font-size: 12px;">
-        ⚠️ <b>Important Note:</b><br/>
-        Information provided here is based on company policies. For case-specific clarifications, connect with HR.
-    </div>
-    """, unsafe_allow_html=True)
