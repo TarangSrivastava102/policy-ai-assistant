@@ -3,10 +3,11 @@ from google import genai
 from pypdf import PdfReader
 import smtplib
 from email.message import EmailMessage
-from html import escape
 from pathlib import Path
 import base64
 import textwrap
+import calendar
+from datetime import date, datetime
 
 
 # ============================================================
@@ -28,21 +29,49 @@ st.set_page_config(
 HR_EMAIL = "tarang@thegermanemedia.com"
 COMPANY_DOMAIN = "thegermanemedia.com"
 
-# Google Calendar Appointment Schedule
 HR_BOOKING_URL = (
     "https://calendar.app.google/wjkBcfyeAgKqCRUVA"
 )
 
-# Direct Google Chat with HR
 DIRECT_GOOGLE_CHAT_HR = (
     "https://chat.google.com/dm/tarang@thegermanemedia.com"
 )
 
-# Policy PDF
 POLICY_PDF = "GERMANE_MEDIA_LLC_POLICY_DOCUMENT.pdf"
 
-# Gemini model
 GEMINI_MODEL = "gemini-3.6-flash"
+
+
+# ============================================================
+# REIMBURSEMENT CONFIGURATION
+# ============================================================
+
+REIMBURSEMENT_CUTOFF_DAY = 22
+
+REIMBURSEMENT_CYCLE_MONTHS = 3
+
+REIMBURSEMENT_TYPES = {
+
+    "Wi-Fi / Internet": {
+        "monthly_limit": 1000,
+        "max_invoices": 3,
+    },
+
+    "Gym / Health": {
+        "monthly_limit": 1000,
+        "max_invoices": 3,
+    },
+
+    "Course": {
+        "monthly_limit": 1000,
+        "max_invoices": 3,
+    },
+
+    "Other Reimbursement": {
+        "monthly_limit": None,
+        "max_invoices": None,
+    },
+}
 
 
 # ============================================================
@@ -111,43 +140,189 @@ st.markdown(
             font-size: 13px;
         }
 
-        .login-card {
-            max-width: 560px;
-            margin: 80px auto;
-            padding: 40px;
-            border: 1px solid #e2e8f0;
+        .reimbursement-header {
+            background: linear-gradient(
+                135deg,
+                #f7f5ff,
+                #ffffff
+            );
+            border: 1px solid #e5e0ff;
             border-radius: 16px;
-            background: white;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+            padding: 25px;
+            margin-bottom: 22px;
         }
 
-        .login-title {
-            font-size: 30px;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 8px;
+        .reimbursement-title {
+            font-size: 28px;
+            font-weight: 800;
+            color: #17233c;
+            margin-bottom: 7px;
         }
 
-        .login-subtitle {
-            color: #64748b;
-            font-size: 15px;
-            margin-bottom: 24px;
+        .reimbursement-subtitle {
+            font-size: 14px;
+            color: #667085;
         }
 
-        .security-note {
-            margin-top: 20px;
-            padding: 12px 14px;
-            border-radius: 8px;
+        .rule-card {
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 15px;
+        }
+
+        .summary-card {
             background: #f8fafc;
-            color: #475569;
-            font-size: 12px;
             border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 15px;
+        }
+
+        .total-card {
+            background: #f5f3ff;
+            border: 1px solid #ddd6fe;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .amount-big {
+            font-size: 28px;
+            font-weight: 800;
+            color: #5b43d6;
         }
 
     </style>
     """,
     unsafe_allow_html=True
 )
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def add_months(year, month, months_to_add):
+
+    total_months = (
+        year * 12
+        + (month - 1)
+        + months_to_add
+    )
+
+    new_year = total_months // 12
+
+    new_month = (
+        total_months % 12
+        + 1
+    )
+
+    return new_year, new_month
+
+
+def month_label(year, month):
+
+    return (
+        f"{calendar.month_name[month]} {year}"
+    )
+
+
+def get_default_submission_month():
+
+    today = date.today()
+
+    if today.day > REIMBURSEMENT_CUTOFF_DAY:
+
+        return add_months(
+            today.year,
+            today.month,
+            1
+        )
+
+    return (
+        today.year,
+        today.month
+    )
+
+
+def get_eligible_months_for_demo():
+
+    """
+    STEP 1 ONLY
+
+    Google Sheets will be connected in Step 2.
+
+    Until then, the portal uses the current
+    submission month to demonstrate the UI.
+
+    Once Google Sheets is connected, this function
+    will automatically use the employee's actual
+    previous reimbursement date.
+    """
+
+    submission_year, submission_month = (
+        get_default_submission_month()
+    )
+
+    months = []
+
+    for i in range(2, -1, -1):
+
+        year, month = add_months(
+            submission_year,
+            submission_month,
+            -i
+        )
+
+        months.append(
+            {
+                "year": year,
+                "month": month,
+                "label": month_label(
+                    year,
+                    month
+                )
+            }
+        )
+
+    return months
+
+
+def calculate_reimbursement(
+    reimbursement_type,
+    total_amount
+):
+
+    config = REIMBURSEMENT_TYPES[
+        reimbursement_type
+    ]
+
+    limit = config["monthly_limit"]
+
+    if limit is None:
+
+        return total_amount
+
+    return min(
+        total_amount,
+        limit
+    )
+
+
+# ============================================================
+# INITIALIZE REIMBURSEMENT SESSION
+# ============================================================
+
+if "reimbursement_entries" not in st.session_state:
+
+    st.session_state.reimbursement_entries = []
+
+
+if "reimbursement_submitted" not in st.session_state:
+
+    st.session_state.reimbursement_submitted = False
 
 
 # ============================================================
@@ -211,8 +386,12 @@ def smtp_is_configured():
     return (
         "SMTP_EMAIL" in st.secrets
         and "SMTP_PASSWORD" in st.secrets
-        and str(st.secrets["SMTP_EMAIL"]).strip() != ""
-        and str(st.secrets["SMTP_PASSWORD"]).strip() != ""
+        and str(
+            st.secrets["SMTP_EMAIL"]
+        ).strip() != ""
+        and str(
+            st.secrets["SMTP_PASSWORD"]
+        ).strip() != ""
     )
 
 
@@ -256,10 +435,6 @@ def send_hr_email(
         )
     )
 
-    # --------------------------------------------------------
-    # Build conversation transcript
-    # --------------------------------------------------------
-
     transcript_lines = []
 
     for message in conversation:
@@ -271,16 +446,13 @@ def send_hr_email(
         )
 
         transcript_lines.append(
-            f"{role}:\n{message['content']}\n"
+            f"{role}:\n"
+            f"{message['content']}\n"
         )
 
     transcript = "\n".join(
         transcript_lines
     )
-
-    # --------------------------------------------------------
-    # Email
-    # --------------------------------------------------------
 
     msg = EmailMessage()
 
@@ -325,10 +497,6 @@ HR Booking Page:
 """
     )
 
-    # --------------------------------------------------------
-    # SMTP connection
-    # --------------------------------------------------------
-
     with smtplib.SMTP(
         smtp_host,
         smtp_port,
@@ -360,9 +528,14 @@ def load_and_index_pdf(pdf_path):
 
     pages_text = []
 
-    for idx, page in enumerate(reader.pages):
+    for idx, page in enumerate(
+        reader.pages
+    ):
 
-        text = page.extract_text() or ""
+        text = (
+            page.extract_text()
+            or ""
+        )
 
         pages_text.append(
             {
@@ -394,12 +567,9 @@ def query_policy_ai(
         )
 
         history_context += (
-            f"{role}: {msg['content']}\n"
+            f"{role}: "
+            f"{msg['content']}\n"
         )
-
-    # --------------------------------------------------------
-    # Load policy
-    # --------------------------------------------------------
 
     pdf_pages = load_and_index_pdf(
         POLICY_PDF
@@ -407,14 +577,11 @@ def query_policy_ai(
 
     full_context = "\n\n".join(
         [
-            f"--- PAGE {p['page']} ---\n{p['text']}"
+            f"--- PAGE {p['page']} ---\n"
+            f"{p['text']}"
             for p in pdf_pages
         ]
     )
-
-    # --------------------------------------------------------
-    # System prompt
-    # --------------------------------------------------------
 
     system_prompt = f"""
 You are the official GM Policy Assistant
@@ -436,10 +603,10 @@ IMPORTANT RULES
 2. DO NOT INVENT POLICY.
 
 3. DO NOT ASSUME INFORMATION THAT IS NOT WRITTEN
-   IN THE HANDBOOK.
+IN THE HANDBOOK.
 
 4. If the question cannot be answered from the handbook,
-   respond exactly:
+respond exactly:
 
 "I couldn't find a specific provision covering this in the
 Germane Media LLC Employee Policy Handbook. I recommend
@@ -452,32 +619,17 @@ Example:
 [📄 Page 12]
 
 6. If multiple pages support the answer, cite all relevant
-   pages.
+pages.
 
-Example:
+7. Keep answers professional, concise and easy to understand.
 
-[📄 Page 2, Page 18, Page 24]
+8. Never claim something is policy unless it is supported
+by the handbook.
 
-7. For appraisal, compensation, variable pay, probation,
-   confirmation, extension, termination or similar matters,
-   explicitly mention management discretion where the
-   handbook provides for it.
+9. If a policy has an exception, clearly mention it.
 
-8. If the employee asks a follow-up question, use the
-   previous conversation to understand what they mean.
-
-9. Keep answers professional, concise and easy to understand.
-
-10. Never claim something is policy unless it is supported
-    by the handbook.
-
-11. If a policy has an exception, clearly mention it.
-
-12. If the handbook gives a specific number, date, duration,
-    percentage, amount or entitlement, reproduce it accurately.
-
-13. The Employment Agreement may prevail where applicable,
-    but do not invent Employment Agreement terms.
+10. If the handbook gives a specific number, date, duration,
+percentage, amount or entitlement, reproduce it accurately.
 
 ============================================================
 POLICY HANDBOOK
@@ -504,9 +656,13 @@ ANSWER
 
     try:
 
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=system_prompt
+        response = (
+            gemini_client
+            .models
+            .generate_content(
+                model=GEMINI_MODEL,
+                contents=system_prompt
+            )
         )
 
         if response and response.text:
@@ -527,38 +683,819 @@ ANSWER
 
 
 # ============================================================
+# REIMBURSEMENT PORTAL
+# ============================================================
+
+def reimbursement_portal():
+
+    st.markdown(
+        """
+        <div class="reimbursement-header">
+
+            <div class="reimbursement-title">
+                💰 Employee Reimbursement Portal
+            </div>
+
+            <div class="reimbursement-subtitle">
+                Submit your eligible reimbursement claims
+                securely through the Germane Media employee portal.
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
+    # --------------------------------------------------------
+    # EMPLOYEE INFORMATION
+    # --------------------------------------------------------
+
+    st.markdown("### 👤 Employee Information")
+
+    info_col1, info_col2 = st.columns(2)
+
+    with info_col1:
+
+        st.text_input(
+            "Employee Name",
+            value=st.session_state.emp_name,
+            disabled=True
+        )
+
+    with info_col2:
+
+        st.text_input(
+            "Company Email",
+            value=st.session_state.emp_email,
+            disabled=True
+        )
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # SUBMISSION DEADLINE
+    # --------------------------------------------------------
+
+    today = date.today()
+
+    if today.day > REIMBURSEMENT_CUTOFF_DAY:
+
+        next_year, next_month = add_months(
+            today.year,
+            today.month,
+            1
+        )
+
+        deadline_message = (
+            f"The submission deadline for "
+            f"{calendar.month_name[today.month]} "
+            f"{today.year} has passed. "
+            f"You can submit your reimbursement in "
+            f"{calendar.month_name[next_month]} "
+            f"{next_year}, before the 22nd."
+        )
+
+        st.warning(
+            f"⚠️ {deadline_message}"
+        )
+
+    else:
+
+        st.success(
+            f"✅ Reimbursement submissions are open "
+            f"until the {REIMBURSEMENT_CUTOFF_DAY}th "
+            f"of {calendar.month_name[today.month]} "
+            f"{today.year}."
+        )
+
+
+    # --------------------------------------------------------
+    # IMPORTANT RULES
+    # --------------------------------------------------------
+
+    with st.expander(
+        "📋 Important Reimbursement Rules",
+        expanded=True
+    ):
+
+        st.markdown(
+            """
+            **Eligibility**
+
+            - Applicable to Full-Time Employees and Interns.
+            - Consultants are not eligible unless specifically
+              approved by management.
+
+            **Submission**
+
+            - Claims can cover a maximum of 3 months.
+            - Claims must be submitted before the 22nd.
+            - Supporting documents are mandatory.
+            - Employees are responsible for submitting claims
+              on time.
+
+            **Monthly Limits**
+
+            - Wi-Fi / Internet: ₹1,000 per month.
+            - Gym / Health: ₹1,000 per month.
+            - Course: ₹1,000 per month.
+            - Other Reimbursement: No ₹1,000 cap.
+
+            **Invoice Limits**
+
+            - Wi-Fi / Internet: maximum 3 invoices per month.
+            - Gym / Health: maximum 3 invoices per month.
+            - Course: maximum 3 invoices per month.
+            - Other Reimbursement: unlimited invoices.
+            """
+        )
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # ELIGIBLE MONTHS
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 📅 Select Reimbursement Months"
+    )
+
+    st.caption(
+        "You can select a maximum of 3 months."
+    )
+
+    eligible_months = (
+        get_eligible_months_for_demo()
+    )
+
+    eligible_labels = [
+        item["label"]
+        for item in eligible_months
+    ]
+
+
+    selected_months = st.multiselect(
+        "Select the months you want to claim",
+        options=eligible_labels,
+        max_selections=3,
+        key="selected_reimbursement_months"
+    )
+
+
+    if not selected_months:
+
+        st.info(
+            "Please select at least one month "
+            "to continue."
+        )
+
+        return
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # CLEAR PREVIOUS ENTRIES WHEN MONTH SELECTION CHANGES
+    # --------------------------------------------------------
+
+    if (
+        "last_selected_months"
+        not in st.session_state
+    ):
+
+        st.session_state.last_selected_months = []
+
+
+    if (
+        st.session_state.last_selected_months
+        != selected_months
+    ):
+
+        st.session_state.reimbursement_entries = []
+
+        st.session_state.last_selected_months = (
+            selected_months
+        )
+
+
+    # --------------------------------------------------------
+    # MONTHLY CLAIMS
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 🧾 Reimbursement Details"
+    )
+
+    st.caption(
+        "Add reimbursement claims for each selected month."
+    )
+
+
+    for month_index, selected_month in enumerate(
+        selected_months
+    ):
+
+        st.markdown(
+            f"## 📅 {selected_month}"
+        )
+
+
+        # ----------------------------------------------------
+        # NUMBER OF CLAIMS
+        # ----------------------------------------------------
+
+        claim_count_key = (
+            f"claim_count_{selected_month}"
+        )
+
+        if claim_count_key not in st.session_state:
+
+            st.session_state[
+                claim_count_key
+            ] = 1
+
+
+        st.write(
+            "Add reimbursement type"
+        )
+
+
+        # ----------------------------------------------------
+        # CLAIM TYPE
+        # ----------------------------------------------------
+
+        claim_type = st.selectbox(
+            "Reimbursement Type",
+            options=list(
+                REIMBURSEMENT_TYPES.keys()
+            ),
+            key=f"type_{selected_month}"
+        )
+
+
+        config = REIMBURSEMENT_TYPES[
+            claim_type
+        ]
+
+
+        # ----------------------------------------------------
+        # INVOICE COUNT
+        # ----------------------------------------------------
+
+        if config["max_invoices"] is None:
+
+            invoice_count = st.number_input(
+                "Number of invoices",
+                min_value=1,
+                max_value=20,
+                value=1,
+                step=1,
+                key=f"invoice_count_{selected_month}"
+            )
+
+            st.caption(
+                "Other reimbursement allows multiple invoices."
+            )
+
+        else:
+
+            invoice_count = st.number_input(
+                "Number of invoices",
+                min_value=1,
+                max_value=config["max_invoices"],
+                value=1,
+                step=1,
+                key=f"invoice_count_{selected_month}"
+            )
+
+            st.caption(
+                f"Maximum {config['max_invoices']} "
+                f"invoices for this reimbursement type."
+            )
+
+
+        st.markdown(
+            "#### Upload invoices"
+        )
+
+
+        invoice_data = []
+
+        total_amount = 0
+
+
+        for invoice_index in range(
+            int(invoice_count)
+        ):
+
+            st.markdown(
+                f"**Invoice {invoice_index + 1}**"
+            )
+
+
+            amount = st.number_input(
+                f"Amount - Invoice {invoice_index + 1} (₹)",
+                min_value=0.0,
+                step=100.0,
+                value=0.0,
+                key=(
+                    f"amount_"
+                    f"{selected_month}_"
+                    f"{invoice_index}"
+                )
+            )
+
+
+            uploaded_file = st.file_uploader(
+                (
+                    f"Supporting document - "
+                    f"Invoice {invoice_index + 1}"
+                ),
+                type=[
+                    "pdf",
+                    "jpg",
+                    "jpeg",
+                    "png"
+                ],
+                key=(
+                    f"file_"
+                    f"{selected_month}_"
+                    f"{invoice_index}"
+                )
+            )
+
+
+            total_amount += amount
+
+
+            invoice_data.append(
+                {
+                    "invoice_number":
+                        invoice_index + 1,
+                    "amount": amount,
+                    "file": uploaded_file
+                }
+            )
+
+
+        # ----------------------------------------------------
+        # CALCULATE MONTHLY REIMBURSEMENT
+        # ----------------------------------------------------
+
+        eligible_amount = (
+            calculate_reimbursement(
+                claim_type,
+                total_amount
+            )
+        )
+
+
+        st.markdown(
+            f"""
+            <div class="summary-card">
+
+            <b>{claim_type}</b>
+
+            <br><br>
+
+            Total invoice amount:
+            <b>₹{total_amount:,.2f}</b>
+
+            <br>
+
+            Eligible reimbursement:
+            <b>₹{eligible_amount:,.2f}</b>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+        if (
+            config["monthly_limit"]
+            is not None
+            and total_amount > config["monthly_limit"]
+        ):
+
+            st.info(
+                f"The total eligible amount for "
+                f"{claim_type} is capped at "
+                f"₹{config['monthly_limit']:,} "
+                f"per month."
+            )
+
+
+        st.divider()
+
+
+    # --------------------------------------------------------
+    # REVIEW SECTION
+    # --------------------------------------------------------
+
+    st.markdown(
+        "## 🔎 Review Your Reimbursement"
+    )
+
+    st.caption(
+        "Please verify all amounts and documents "
+        "before submitting."
+    )
+
+
+    grand_total_claimed = 0
+
+    grand_total_reimbursable = 0
+
+
+    for selected_month in selected_months:
+
+        claim_type = st.session_state.get(
+            f"type_{selected_month}",
+            "Wi-Fi / Internet"
+        )
+
+        config = REIMBURSEMENT_TYPES[
+            claim_type
+        ]
+
+        invoice_count = st.session_state.get(
+            f"invoice_count_{selected_month}",
+            1
+        )
+
+        month_total = 0
+
+        invoice_files_present = True
+
+
+        for invoice_index in range(
+            int(invoice_count)
+        ):
+
+            amount = st.session_state.get(
+                (
+                    f"amount_"
+                    f"{selected_month}_"
+                    f"{invoice_index}"
+                ),
+                0.0
+            )
+
+            month_total += amount
+
+
+            uploaded_file = st.session_state.get(
+                (
+                    f"file_"
+                    f"{selected_month}_"
+                    f"{invoice_index}"
+                )
+            )
+
+
+            if uploaded_file is None:
+
+                invoice_files_present = False
+
+
+        month_reimbursable = (
+            calculate_reimbursement(
+                claim_type,
+                month_total
+            )
+        )
+
+
+        grand_total_claimed += month_total
+
+        grand_total_reimbursable += (
+            month_reimbursable
+        )
+
+
+        col1, col2, col3 = st.columns(
+            [2, 1, 1]
+        )
+
+
+        with col1:
+
+            st.write(
+                f"**{selected_month}**"
+            )
+
+            st.caption(
+                claim_type
+            )
+
+
+        with col2:
+
+            st.write(
+                f"Claimed: "
+                f"₹{month_total:,.2f}"
+            )
+
+
+        with col3:
+
+            st.write(
+                f"Eligible: "
+                f"₹{month_reimbursable:,.2f}"
+            )
+
+
+        if not invoice_files_present:
+
+            st.warning(
+                f"Please upload all supporting documents "
+                f"for {selected_month}."
+            )
+
+
+    # --------------------------------------------------------
+    # GRAND TOTAL
+    # --------------------------------------------------------
+
+    st.markdown(
+        f"""
+        <div class="total-card">
+
+        <div>
+            <b>Total Invoice Value</b>
+        </div>
+
+        <div class="amount-big">
+            ₹{grand_total_claimed:,.2f}
+        </div>
+
+        <br>
+
+        <div>
+            <b>Total Reimbursement Amount</b>
+        </div>
+
+        <div class="amount-big">
+            ₹{grand_total_reimbursable:,.2f}
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # DECLARATION
+    # --------------------------------------------------------
+
+    declaration = st.checkbox(
+        "I confirm that the information submitted is "
+        "correct and that all uploaded documents are "
+        "genuine supporting documents."
+    )
+
+
+    # --------------------------------------------------------
+    # SUBMIT
+    # --------------------------------------------------------
+
+    submit_button = st.button(
+        "✅ Submit Reimbursement",
+        type="primary",
+        use_container_width=True
+    )
+
+
+    if submit_button:
+
+        # ----------------------------------------------------
+        # DEADLINE CHECK
+        # ----------------------------------------------------
+
+        today = date.today()
+
+        if today.day > REIMBURSEMENT_CUTOFF_DAY:
+
+            st.error(
+                "The reimbursement submission deadline "
+                "for this month has passed. "
+                "Please submit your reimbursement "
+                "in the next month before the 22nd."
+            )
+
+            return
+
+
+        # ----------------------------------------------------
+        # DECLARATION CHECK
+        # ----------------------------------------------------
+
+        if not declaration:
+
+            st.error(
+                "Please confirm the declaration before "
+                "submitting your reimbursement."
+            )
+
+            return
+
+
+        # ----------------------------------------------------
+        # MONTH CHECK
+        # ----------------------------------------------------
+
+        if len(selected_months) == 0:
+
+            st.error(
+                "Please select at least one month."
+            )
+
+            return
+
+
+        if len(selected_months) > 3:
+
+            st.error(
+                "You can claim reimbursement for "
+                "a maximum of 3 months."
+            )
+
+            return
+
+
+        # ----------------------------------------------------
+        # AMOUNT & DOCUMENT CHECK
+        # ----------------------------------------------------
+
+        validation_failed = False
+
+
+        for selected_month in selected_months:
+
+            invoice_count = st.session_state.get(
+                f"invoice_count_{selected_month}",
+                1
+            )
+
+
+            for invoice_index in range(
+                int(invoice_count)
+            ):
+
+                amount = st.session_state.get(
+                    (
+                        f"amount_"
+                        f"{selected_month}_"
+                        f"{invoice_index}"
+                    ),
+                    0.0
+                )
+
+
+                uploaded_file = st.session_state.get(
+                    (
+                        f"file_"
+                        f"{selected_month}_"
+                        f"{invoice_index}"
+                    )
+                )
+
+
+                if amount <= 0:
+
+                    st.error(
+                        f"Please enter a valid amount "
+                        f"for {selected_month}, "
+                        f"Invoice {invoice_index + 1}."
+                    )
+
+                    validation_failed = True
+
+
+                if uploaded_file is None:
+
+                    st.error(
+                        f"Please upload the supporting "
+                        f"document for {selected_month}, "
+                        f"Invoice {invoice_index + 1}."
+                    )
+
+                    validation_failed = True
+
+
+        if validation_failed:
+
+            return
+
+
+        # ----------------------------------------------------
+        # SUCCESS
+        # ----------------------------------------------------
+
+        st.session_state.reimbursement_submitted = True
+
+
+    # --------------------------------------------------------
+    # SUCCESS MESSAGE
+    # --------------------------------------------------------
+
+    if st.session_state.reimbursement_submitted:
+
+        st.success(
+            "🎉 Your reimbursement has been "
+            "submitted successfully."
+        )
+
+        st.info(
+            f"""
+            Employee: {st.session_state.emp_name}
+
+            Email: {st.session_state.emp_email}
+
+            Months:
+            {", ".join(selected_months)}
+
+            Total Invoice Value:
+            ₹{grand_total_claimed:,.2f}
+
+            Total Reimbursement Amount:
+            ₹{grand_total_reimbursable:,.2f}
+
+            Your reimbursement is currently marked
+            as submitted.
+            """
+        )
+
+        st.warning(
+            "This is Step 1 of the reimbursement system. "
+            "Google Sheets and Google Drive storage will "
+            "be connected in the next step."
+        )
+
+
+# ============================================================
 # LOGIN PAGE
 # ============================================================
 
 if not st.user.is_logged_in:
 
-    # Load logo.png from the same folder as app.py.
-    # A text "G" fallback is used if the file is temporarily unavailable.
-    logo_path = Path(__file__).parent / "logo.png"
+    logo_path = (
+        Path(__file__).parent
+        / "logo.png"
+    )
 
     if logo_path.exists():
-        logo_b64 = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
+
+        logo_b64 = base64.b64encode(
+            logo_path.read_bytes()
+        ).decode("utf-8")
+
         logo_html = (
-            f'<img class="brand-logo" src="data:image/png;base64,{logo_b64}" '
-            'alt="Germane Media LLC logo">'
+            f'<img class="brand-logo" '
+            f'src="data:image/png;base64,{logo_b64}" '
+            f'alt="Germane Media LLC logo">'
         )
+
     else:
-        logo_html = '<div class="brand-logo-fallback">G</div>'
+
+        logo_html = (
+            '<div class="brand-logo-fallback">G</div>'
+        )
+
 
     st.markdown(
         """
         <style>
-        /* ---------- Streamlit chrome ---------- */
-        #MainMenu, footer, header {
+
+        #MainMenu,
+        footer,
+        header {
             visibility: hidden;
         }
 
         .stApp {
             background:
-                radial-gradient(circle at 12% 20%, rgba(112, 72, 237, 0.06), transparent 28%),
-                radial-gradient(circle at 82% 55%, rgba(112, 72, 237, 0.05), transparent 30%),
+                radial-gradient(
+                    circle at 12% 20%,
+                    rgba(112, 72, 237, 0.06),
+                    transparent 28%
+                ),
+                radial-gradient(
+                    circle at 82% 55%,
+                    rgba(112, 72, 237, 0.05),
+                    transparent 30%
+                ),
                 #fbfbfe;
         }
 
@@ -567,7 +1504,6 @@ if not st.user.is_logged_in:
             padding: 28px 38px 18px !important;
         }
 
-        /* ---------- Main login layout ---------- */
         .login-page {
             min-height: calc(100vh - 90px);
             display: flex;
@@ -582,7 +1518,6 @@ if not st.user.is_logged_in:
             padding: 0 8px 0 24px;
         }
 
-        /* ---------- Brand ---------- */
         .brand {
             display: flex;
             align-items: center;
@@ -603,11 +1538,14 @@ if not st.user.is_logged_in:
             align-items: center;
             justify-content: center;
             border-radius: 24px;
-            background: linear-gradient(135deg, #5d4bea, #7c4df0);
+            background: linear-gradient(
+                135deg,
+                #5d4bea,
+                #7c4df0
+            );
             color: white;
             font-size: 58px;
             font-weight: 800;
-            box-shadow: 0 12px 28px rgba(91, 75, 234, .20);
         }
 
         .brand-name {
@@ -615,7 +1553,6 @@ if not st.user.is_logged_in:
             line-height: 1.1;
             font-weight: 800;
             color: #15213a;
-            letter-spacing: -0.7px;
         }
 
         .brand-subtitle {
@@ -633,7 +1570,6 @@ if not st.user.is_logged_in:
             background: #6547ed;
         }
 
-        /* ---------- Left content ---------- */
         .left-title {
             font-size: 23px;
             line-height: 1.25;
@@ -679,7 +1615,6 @@ if not st.user.is_logged_in:
         .feature-title {
             color: #18233a;
             font-size: 14px;
-            line-height: 1.25;
             font-weight: 800;
             margin: 5px 0 8px;
         }
@@ -690,39 +1625,11 @@ if not st.user.is_logged_in:
             line-height: 1.65;
         }
 
-        /* ---------- Decorative wave ---------- */
         .wave {
             margin-top: 40px;
             width: 100%;
             height: 95px;
             overflow: hidden;
-            opacity: .75;
-        }
-
-        .wave svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        /* ---------- Login card ----------
-           The second Streamlit column is the card. The invisible
-           anchor below lets us target that exact column with :has(). */
-        div[data-testid="stColumn"]:has(.login-card-anchor) {
-            background: rgba(255, 255, 255, .97);
-            border: 1px solid #e8e8ef;
-            border-radius: 20px;
-            padding: 34px 38px 28px !important;
-            box-shadow: 0 14px 40px rgba(32, 35, 58, .09);
-            box-sizing: border-box;
-            align-self: stretch;
-        }
-
-        .login-card {
-            padding: 0;
-        }
-
-        .login-card-anchor {
-            display: none;
         }
 
         .lock-circle {
@@ -742,10 +1649,7 @@ if not st.user.is_logged_in:
             text-align: center;
             color: #17233c;
             font-size: 31px;
-            line-height: 1.15;
             font-weight: 800;
-            letter-spacing: -.5px;
-            margin-bottom: 9px;
         }
 
         .card-subtitle {
@@ -766,13 +1670,7 @@ if not st.user.is_logged_in:
             border-radius: 11px;
             color: #5a43c9;
             font-size: 14px;
-            line-height: 1.55;
             font-weight: 700;
-        }
-
-        .restricted-icon {
-            font-size: 22px;
-            flex: 0 0 auto;
         }
 
         .signin-label {
@@ -783,12 +1681,8 @@ if not st.user.is_logged_in:
             margin-bottom: 12px;
         }
 
-        /* ---------- Real Streamlit login button ---------- */
         div[data-testid="stButton"] {
             width: 100% !important;
-            display: flex;
-            justify-content: center;
-            margin: 0;
         }
 
         div[data-testid="stButton"] button {
@@ -796,33 +1690,16 @@ if not st.user.is_logged_in:
             min-height: 54px !important;
             border-radius: 8px !important;
             border: 1px solid #6547ed !important;
-            background: linear-gradient(90deg, #6547ed, #7048ed) !important;
+            background: linear-gradient(
+                90deg,
+                #6547ed,
+                #7048ed
+            ) !important;
             color: #ffffff !important;
             font-size: 16px !important;
             font-weight: 800 !important;
-            box-shadow: none !important;
         }
 
-        div[data-testid="stButton"] button:hover {
-            border-color: #5538d8 !important;
-            background: linear-gradient(90deg, #5b3fe1, #6840e6) !important;
-        }
-
-        .google-mark {
-            display: inline-flex;
-            width: 43px;
-            height: 52px;
-            align-items: center;
-            justify-content: center;
-            background: white;
-            border-radius: 8px 0 0 8px;
-            color: #4285f4;
-            font-size: 20px;
-            font-weight: 900;
-            margin-right: 12px;
-        }
-
-        /* ---------- Divider / Workspace note ---------- */
         .divider {
             display: flex;
             align-items: center;
@@ -830,14 +1707,6 @@ if not st.user.is_logged_in:
             margin: 29px 0 24px;
             color: #9aa1ae;
             font-size: 13px;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: "";
-            height: 1px;
-            background: #e7e7ed;
-            flex: 1;
         }
 
         .workspace-note {
@@ -852,18 +1721,6 @@ if not st.user.is_logged_in:
             line-height: 1.65;
         }
 
-        .workspace-icon {
-            width: 30px;
-            flex: 0 0 30px;
-            color: #6547ed;
-            font-size: 25px;
-            text-align: center;
-        }
-
-        .workspace-note strong {
-            color: #252d40;
-        }
-
         .protected {
             text-align: center;
             margin-top: 32px;
@@ -871,208 +1728,251 @@ if not st.user.is_logged_in:
             font-size: 12px;
         }
 
-        .protected-icon {
-            color: #8a91a2;
-        }
-
-        /* ---------- Bottom footer ---------- */
-        .page-footer {
-            text-align: center;
-            margin-top: 12px;
-            color: #8a91a2;
-            font-size: 12px;
-        }
-
-        /* ---------- Responsive ---------- */
-        @media (max-width: 900px) {
-            .block-container {
-                padding: 20px 18px !important;
-            }
-
-            .login-page {
-                display: block;
-            }
-
-            .left-panel,
-            .right-panel {
-                padding: 15px 8px;
-            }
-
-            .brand {
-                margin-bottom: 34px;
-            }
-
-            .features {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-
-            div[data-testid="stColumn"]:has(.login-card-anchor) {
-                padding: 24px 20px !important;
-            }
-
-            .login-card {
-                min-height: auto;
-            }
-        }
         </style>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
-    # Two-column page. The actual login button remains a Streamlit widget
-    # so st.login() continues to work normally.
-    left_col, right_col = st.columns([1.03, 0.97], gap="large")
+
+    left_col, right_col = st.columns(
+        [1.03, 0.97],
+        gap="large"
+    )
+
 
     with left_col:
-        left_html = textwrap.dedent(f"""
+
+        left_html = textwrap.dedent(
+            f"""
             <div class="left-panel">
+
                 <div class="brand">
+
                     {logo_html}
+
                     <div>
-                        <div class="brand-name">Germane Media LLC</div>
-                        <div class="brand-subtitle">GM Policy Assistant • Internal HR Portal</div>
+
+                        <div class="brand-name">
+                            Germane Media LLC
+                        </div>
+
+                        <div class="brand-subtitle">
+                            GM Policy Assistant •
+                            Internal HR Portal
+                        </div>
+
                         <div class="brand-line"></div>
+
                     </div>
+
                 </div>
 
-                <div class="left-title">Your Intelligent HR Policy Companion</div>
+                <div class="left-title">
+                    Your Intelligent HR Policy Companion
+                </div>
 
                 <div class="left-description">
-                    Get instant, accurate answers to your policy questions,
-                    understand company guidelines, and connect with HR
-                    for personalized support — anytime, anywhere.
+                    Get instant, accurate answers to your policy
+                    questions, understand company guidelines,
+                    submit reimbursements, and connect with HR
+                    for personalized support.
                 </div>
 
                 <div class="features">
-                    <div class="feature">
-                        <div class="feature-icon">▢</div>
-                        <div>
-                            <div class="feature-title">Instant Policy Answers</div>
-                            <div class="feature-text">
-                                Accurate responses based on Germane Media LLC
-                                Employee Policy Handbook.
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="feature">
-                        <div class="feature-icon">♙</div>
-                        <div>
-                            <div class="feature-title">Secure &amp; Confidential</div>
-                            <div class="feature-text">
-                                Your conversations are private, secure, and
-                                associated with your company account.
-                            </div>
+
+                        <div class="feature-icon">
+                            ▢
                         </div>
+
+                        <div>
+
+                            <div class="feature-title">
+                                Instant Policy Answers
+                            </div>
+
+                            <div class="feature-text">
+                                Accurate responses based on
+                                Germane Media LLC Employee
+                                Policy Handbook.
+                            </div>
+
+                        </div>
+
                     </div>
 
-                    <div class="feature">
-                        <div class="feature-icon">♧</div>
-                        <div>
-                            <div class="feature-title">Direct HR Support</div>
-                            <div class="feature-text">
-                                Escalate questions to HR or schedule a confidential
-                                15-minute discussion.
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="feature">
-                        <div class="feature-icon">♟</div>
-                        <div>
-                            <div class="feature-title">For Employees Only</div>
-                            <div class="feature-text">
-                                This portal is restricted to active Germane Media
-                                LLC employees.
-                            </div>
+
+                        <div class="feature-icon">
+                            ♙
                         </div>
+
+                        <div>
+
+                            <div class="feature-title">
+                                Secure & Confidential
+                            </div>
+
+                            <div class="feature-text">
+                                Your conversations are private,
+                                secure, and associated with
+                                your company account.
+                            </div>
+
+                        </div>
+
                     </div>
+
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+                            ♧
+                        </div>
+
+                        <div>
+
+                            <div class="feature-title">
+                                Direct HR Support
+                            </div>
+
+                            <div class="feature-text">
+                                Escalate questions to HR or
+                                schedule a confidential discussion.
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+                            ♟
+                        </div>
+
+                        <div>
+
+                            <div class="feature-title">
+                                For Employees Only
+                            </div>
+
+                            <div class="feature-text">
+                                This portal is restricted to
+                                active Germane Media LLC employees.
+                            </div>
+
+                        </div>
+
+                    </div>
+
                 </div>
 
-                <div class="wave">
-                    <svg viewBox="0 0 900 120" preserveAspectRatio="none">
-                        <path d="M0,65 C120,115 180,10 300,65 S480,115 600,60 S780,10 900,65"
-                              fill="none" stroke="#c9c0ff" stroke-width="2"/>
-                        <path d="M0,80 C120,125 180,25 300,75 S480,125 600,70 S780,25 900,75"
-                              fill="none" stroke="#ddd8ff" stroke-width="2"/>
-                        <path d="M0,95 C120,135 180,40 300,85 S480,135 600,80 S780,40 900,85"
-                              fill="none" stroke="#ebe8ff" stroke-width="2"/>
-                    </svg>
-                </div>
             </div>
-        """)
+            """
+        )
+
         st.html(left_html)
 
-    with right_col:
-        # A real Streamlit container keeps the complete login card together,
-        # while the HTML inside it is safely dedented so it is rendered as HTML.
-        with st.container(border=True):
-            card_html = textwrap.dedent("""
-                <div class="login-card">
-                    <div class="lock-circle">🔒</div>
 
-                    <div class="card-title">Welcome Back!</div>
+    with right_col:
+
+        with st.container(
+            border=True
+        ):
+
+            card_html = textwrap.dedent(
+                """
+                <div>
+
+                    <div class="lock-circle">
+                        🔒
+                    </div>
+
+                    <div class="card-title">
+                        Welcome Back!
+                    </div>
+
                     <div class="card-subtitle">
                         Sign in to access the GM Policy Assistant
                     </div>
 
                     <div class="restricted">
-                        <div class="restricted-icon">🔒</div>
+
+                        🔒
+
                         <div>
                             This portal is restricted to active
                             Germane Media LLC employees.
                         </div>
+
                     </div>
 
-                    <div class="signin-label">Sign in with your company account</div>
+                    <div class="signin-label">
+                        Sign in with your company account
+                    </div>
+
                 </div>
-            """)
+                """
+            )
+
             st.html(card_html)
+
 
             if st.button(
                 "G   Sign in with Google",
                 key="login_button",
                 type="primary",
-                use_container_width=True,
+                use_container_width=True
             ):
+
                 st.login()
 
-            bottom_html = textwrap.dedent("""
-                <div class="divider">OR</div>
+
+            st.markdown(
+                """
+                <div class="divider">
+                    OR
+                </div>
 
                 <div class="workspace-note">
-                    <div class="workspace-icon">▦</div>
+
+                    ▦
+
                     <div>
+
                         Please use your official
-                        <strong>@thegermanemedia.com Google Workspace account.</strong><br>
-                        Your policy conversations are associated with your
-                        authenticated company account.
+                        <strong>
+                        @thegermanemedia.com
+                        Google Workspace account.
+                        </strong>
+
+                        <br>
+
+                        Your policy conversations are associated
+                        with your authenticated company account.
+
                     </div>
+
                 </div>
 
                 <div class="protected">
-                    <span class="protected-icon">🛡</span>
-                    Protected by Google Workspace Authentication
-                </div>
-            """)
-            st.html(bottom_html)
 
-    st.html(
-        textwrap.dedent("""
-            <div class="page-footer">
-                🛡 Secure • Private • Trusted
-                &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-                © 2026 Germane Media LLC. All rights reserved.
-                &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-                Internal Use Only
-            </div>
-        """)
-    )
+                    🛡 Protected by Google Workspace Authentication
+
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
 
     st.stop()
 
 
+# ============================================================
 # VERIFIED GOOGLE IDENTITY
 # ============================================================
 
@@ -1135,15 +2035,17 @@ if not user_email.endswith(
 # ============================================================
 
 st.session_state.emp_name = user_name
+
 st.session_state.emp_email = user_email
 
 st.session_state.is_hr = (
-    user_email == HR_EMAIL.lower()
+    user_email
+    == HR_EMAIL.lower()
 )
 
 
 # ============================================================
-# SESSION INITIALIZATION
+# CHAT SESSION INITIALIZATION
 # ============================================================
 
 if "messages" not in st.session_state:
@@ -1162,6 +2064,15 @@ if "hr_email_sent" not in st.session_state:
 
 
 # ============================================================
+# PAGE NAVIGATION
+# ============================================================
+
+if "current_page" not in st.session_state:
+
+    st.session_state.current_page = "Policy Assistant"
+
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 
@@ -1175,17 +2086,53 @@ with st.sidebar:
         st.session_state.emp_email
     )
 
+
     if st.session_state.is_hr:
 
         st.success(
             "🔑 HR Admin Mode Active"
         )
 
+
     st.divider()
+
+
+    st.markdown(
+        "### 🧭 Portal"
+    )
+
+
+    if st.button(
+        "🤖 Policy Assistant",
+        width="stretch"
+    ):
+
+        st.session_state.current_page = (
+            "Policy Assistant"
+        )
+
+        st.rerun()
+
+
+    if st.button(
+        "💰 Reimbursement Portal",
+        width="stretch"
+    ):
+
+        st.session_state.current_page = (
+            "Reimbursement"
+        )
+
+        st.rerun()
+
+
+    st.divider()
+
 
     st.markdown(
         "📚 **Company Policy Categories**"
     )
+
 
     categories = [
         "Leave Policy",
@@ -1196,6 +2143,7 @@ with st.sidebar:
         "Full & Final Settlement"
     ]
 
+
     for cat in categories:
 
         if st.button(
@@ -1204,17 +2152,24 @@ with st.sidebar:
             width="stretch"
         ):
 
+            st.session_state.current_page = (
+                "Policy Assistant"
+            )
+
             st.session_state.messages.append(
                 {
                     "role": "user",
                     "content":
-                    f"Summarize the key points of the {cat}."
+                    f"Summarize the key points "
+                    f"of the {cat}."
                 }
             )
 
             st.rerun()
 
+
     st.divider()
+
 
     st.link_button(
         "💬 Message HR on Google Chat",
@@ -1222,7 +2177,9 @@ with st.sidebar:
         width="stretch"
     )
 
+
     st.divider()
+
 
     if st.button(
         "🚪 Sign Out",
@@ -1235,7 +2192,21 @@ with st.sidebar:
 
 
 # ============================================================
-# MAIN INTERFACE
+# REIMBURSEMENT PAGE
+# ============================================================
+
+if (
+    st.session_state.current_page
+    == "Reimbursement"
+):
+
+    reimbursement_portal()
+
+    st.stop()
+
+
+# ============================================================
+# POLICY ASSISTANT PAGE
 # ============================================================
 
 col_main, col_right = st.columns(
@@ -1256,12 +2227,14 @@ with col_main:
         unsafe_allow_html=True
     )
 
+
     st.markdown(
         '<div class="brand-sub">'
         'Ask questions, verify rules, and schedule direct support.'
         '</div>',
         unsafe_allow_html=True
     )
+
 
     st.markdown(
         """
@@ -1299,19 +2272,15 @@ with col_main:
                 message["content"]
             )
 
-            # ------------------------------------------------
-            # Feedback buttons for assistant responses
-            # ------------------------------------------------
 
             if message["role"] == "assistant":
 
-                col_sat, col_not_sat, col_space = st.columns(
-                    [1, 1, 3]
+                col_sat, col_not_sat, col_space = (
+                    st.columns(
+                        [1, 1, 3]
+                    )
                 )
 
-                # --------------------------------------------
-                # SATISFIED
-                # --------------------------------------------
 
                 with col_sat:
 
@@ -1324,9 +2293,6 @@ with col_main:
                             "Thank you for your feedback!"
                         )
 
-                # --------------------------------------------
-                # NOT SATISFIED
-                # --------------------------------------------
 
                 with col_not_sat:
 
@@ -1335,17 +2301,16 @@ with col_main:
                         key=f"not_satisfied_{idx}"
                     ):
 
-                        st.session_state.unsatisfied_msg_idx = idx
+                        st.session_state.unsatisfied_msg_idx = (
+                            idx
+                        )
 
-                        # Reset email state for this request
-                        st.session_state.hr_email_sent = False
+                        st.session_state.hr_email_sent = (
+                            False
+                        )
 
                         st.rerun()
 
-
-                # ------------------------------------------------
-                # HR ESCALATION AREA
-                # ------------------------------------------------
 
                 if (
                     st.session_state.unsatisfied_msg_idx
@@ -1356,25 +2321,27 @@ with col_main:
                         """
                         <div class="escalation-box">
 
-                        <b>We're sorry we couldn't fully resolve your question.</b>
+                        <b>
+                        We're sorry we couldn't fully
+                        resolve your question.
+                        </b>
 
                         <br><br>
 
-                        You can contact HR directly or schedule
-                        a confidential 15-minute discussion.
+                        You can contact HR directly or
+                        schedule a confidential 15-minute
+                        discussion.
 
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
 
-                    col_email, col_calendar = st.columns(
-                        [1, 1]
+
+                    col_email, col_calendar = (
+                        st.columns([1, 1])
                     )
 
-                    # --------------------------------------------
-                    # SEND TO HR
-                    # --------------------------------------------
 
                     with col_email:
 
@@ -1398,11 +2365,13 @@ with col_main:
                                     )
                                 )
 
-                                st.session_state.hr_email_sent = True
+                                st.session_state.hr_email_sent = (
+                                    True
+                                )
 
                                 st.success(
-                                    "Your conversation has been "
-                                    "sent to HR successfully."
+                                    "Your conversation has "
+                                    "been sent to HR successfully."
                                 )
 
                             except Exception as e:
@@ -1411,9 +2380,6 @@ with col_main:
                                     f"Unable to notify HR: {str(e)}"
                                 )
 
-                    # --------------------------------------------
-                    # SCHEDULE HR CALL
-                    # --------------------------------------------
 
                     with col_calendar:
 
@@ -1423,9 +2389,6 @@ with col_main:
                             width="stretch"
                         )
 
-                    # --------------------------------------------
-                    # EMAIL SENT MESSAGE
-                    # --------------------------------------------
 
                     if st.session_state.hr_email_sent:
 
@@ -1435,9 +2398,8 @@ with col_main:
 
                             ✅ <b>HR has been notified.</b>
 
-                            Your conversation transcript has been
-                            sent to HR. You can also schedule a
-                            confidential discussion if required.
+                            Your conversation transcript has
+                            been sent to HR.
 
                             </div>
                             """,
@@ -1464,9 +2426,11 @@ with col_main:
             }
         )
 
-        # Reset previous escalation state
+
         st.session_state.unsatisfied_msg_idx = None
+
         st.session_state.hr_email_sent = False
+
 
         with st.spinner(
             "Searching Germane Media Policy Handbook..."
@@ -1479,6 +2443,7 @@ with col_main:
                     st.session_state.messages
                 )
 
+
                 full_response = (
                     response
                     + "\n\n---\n"
@@ -1488,6 +2453,7 @@ with col_main:
                     "where applicable.*"
                 )
 
+
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
@@ -1495,7 +2461,9 @@ with col_main:
                     }
                 )
 
+
                 st.rerun()
+
 
             except Exception as e:
 
@@ -1514,10 +2482,12 @@ with col_right:
         "### 📅 **Schedule HR Discussion**"
     )
 
+
     st.caption(
         "Need to speak directly with HR? "
         "Book a 15-minute confidential discussion."
     )
+
 
     st.link_button(
         "📅 Schedule 15-Minute HR Discussion",
@@ -1526,17 +2496,21 @@ with col_right:
         width="stretch"
     )
 
+
     st.caption(
         "Google Calendar will show only the available "
         "appointment slots. A Google Meet link will be "
         "provided after booking."
     )
 
+
     st.divider()
 
+
     st.markdown(
-        "💬 **Need immediate help?**"
+        "💡 **Need immediate help?**"
     )
+
 
     st.link_button(
         "💬 Contact HR on Google Chat",
@@ -1544,11 +2518,14 @@ with col_right:
         width="stretch"
     )
 
+
     st.divider()
+
 
     st.markdown(
         "💡 **Suggested Questions**"
     )
+
 
     suggested = [
         "How many leaves accumulate during probation?",
@@ -1556,6 +2533,7 @@ with col_right:
         "What is the timeline for FNF settlement?",
         "How do medical reimbursement requests work?"
     ]
+
 
     for q in suggested:
 
