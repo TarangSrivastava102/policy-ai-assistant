@@ -594,17 +594,21 @@ def reimbursement_portal():
         st.markdown(f'<div class="info-card"><div class="info-label">Company Email</div><div class="info-value">{escape(st.session_state.emp_email)}</div></div>', unsafe_allow_html=True)
     with c3:
         today = date.today()
-        deadline = "Next month" if today.day > REIMBURSEMENT_CUTOFF_DAY else f"{calendar.month_name[today.month]} {REIMBURSEMENT_CUTOFF_DAY}"
-        st.markdown(f'<div class="info-card"><div class="info-label">Submission Deadline</div><div class="info-value">Before the 22nd • {deadline}</div></div>', unsafe_allow_html=True)
-
-    if today.day > REIMBURSEMENT_CUTOFF_DAY:
-        ny, nm = add_months(today.year, today.month, 1)
-        st.warning(
-            f"The {calendar.month_name[today.month]} {today.year} submission window has closed. "
-            f"Please submit in {calendar.month_name[nm]} {ny}, before the 22nd."
+        submission_y, submission_m = current_submission_month()
+        deadline = f"{calendar.month_name[submission_m]} {submission_y}"
+        st.markdown(
+            f'<div class="info-card"><div class="info-label">Submission Deadline</div>'
+            f'<div class="info-value">Before the 22nd • {deadline}</div></div>',
+            unsafe_allow_html=True,
         )
-    else:
-        st.success(f"Reimbursement submissions are open until {calendar.month_name[today.month]} {REIMBURSEMENT_CUTOFF_DAY}.")
+
+    # The active submission window is the current month until the 22nd,
+    # and the next month from the 23rd onward.
+    submission_y, submission_m = current_submission_month()
+    st.success(
+        f"Reimbursement submissions are open for {calendar.month_name[submission_m]} "
+        f"{submission_y} until {calendar.month_name[submission_m]} {REIMBURSEMENT_CUTOFF_DAY}."
+    )
 
     st.markdown(
         """
@@ -832,7 +836,10 @@ def reimbursement_portal():
             </div>
             """
         review_html += "</div>"
-        st.markdown(review_html, unsafe_allow_html=True)
+        # Use Streamlit's dedicated HTML renderer here instead of Markdown's
+        # HTML handling. This prevents the generated review markup from ever
+        # appearing as literal HTML text in the UI.
+        st.html(review_html)
 
     st.markdown(
         f"""
@@ -862,12 +869,10 @@ def reimbursement_portal():
     if submit:
         errors = []
 
-        today = date.today()
-        if today.day > REIMBURSEMENT_CUTOFF_DAY:
-            ny, nm = add_months(today.year, today.month, 1)
-            errors.append(
-                f"The current submission window has closed. Please submit in {calendar.month_name[nm]} {ny}, before the 22nd."
-            )
+        # Do not reject submissions merely because today's calendar date is
+        # after the 22nd. From the 23rd onward, the active window rolls over
+        # to the next month (see current_submission_month()).
+        # Therefore, August 23-31, for example, is a valid September window.
 
         if not declaration:
             errors.append("Please confirm the declaration before submitting.")
