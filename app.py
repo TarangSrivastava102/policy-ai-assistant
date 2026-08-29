@@ -189,26 +189,8 @@ def parse_month_key(value):
     y, m = value.split("-")
     return int(y), int(m)
 
-def reimbursement_today():
-    """
-    Date used by the reimbursement portal.
-    Normally this is today's date.
-
-    Optional testing secret:
-        REIMBURSEMENT_TEST_DATE = "2026-09-15"
-
-    Remove the secret after testing.
-    """
-    test_date = get_secret("REIMBURSEMENT_TEST_DATE")
-    if test_date:
-        try:
-            return datetime.strptime(str(test_date).strip(), "%Y-%m-%d").date()
-        except Exception:
-            pass
-    return date.today()
-
 def current_submission_month():
-    today = reimbursement_today()
+    today = date.today()
     if today.day > REIMBURSEMENT_CUTOFF_DAY:
         return add_months(today.year, today.month, 1)
     return today.year, today.month
@@ -234,21 +216,14 @@ def google_clients():
             "Add gspread, google-auth and google-api-python-client to requirements.txt."
         )
 
-    # Your Streamlit Secrets store the service account as a TOML section:
-    # [google_service_account]
-    # Therefore we read that section directly instead of looking for
-    # a single GOOGLE_SERVICE_ACCOUNT_JSON secret.
-    if "google_service_account" not in st.secrets:
-        raise RuntimeError(
-            "google_service_account is missing from Streamlit Secrets."
-        )
+    raw = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON is missing from Streamlit Secrets.")
 
-    try:
-        info = dict(st.secrets["google_service_account"])
-    except Exception as e:
-        raise RuntimeError(
-            f"Unable to read google_service_account from Streamlit Secrets: {e}"
-        )
+    if isinstance(raw, dict):
+        info = dict(raw)
+    else:
+        info = json.loads(str(raw))
 
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -618,7 +593,7 @@ def reimbursement_portal():
     with c2:
         st.markdown(f'<div class="info-card"><div class="info-label">Company Email</div><div class="info-value">{escape(st.session_state.emp_email)}</div></div>', unsafe_allow_html=True)
     with c3:
-        today = reimbursement_today()
+        today = date.today()
         deadline = "Next month" if today.day > REIMBURSEMENT_CUTOFF_DAY else f"{calendar.month_name[today.month]} {REIMBURSEMENT_CUTOFF_DAY}"
         st.markdown(f'<div class="info-card"><div class="info-label">Submission Deadline</div><div class="info-value">Before the 22nd • {deadline}</div></div>', unsafe_allow_html=True)
 
@@ -839,34 +814,25 @@ def reimbursement_portal():
     st.markdown('<div class="section-head"><div class="section-title">3. Review your submission</div><div class="section-caption">The final summary will be sent to HR after submission.</div></div>', unsafe_allow_html=True)
 
     if all_items:
-        # Native Streamlit components are used for the review so raw HTML
-        # can never appear as text in the employee-facing portal.
-        grouped_review = {}
+        review_html = '<div class="review-card">'
         for item in all_items:
-            grouped_review.setdefault(item["claim_month"], []).append(item)
-
-        for claim_month in sorted(grouped_review.keys()):
-            y, m = parse_month_key(claim_month)
-            st.markdown(f"### {month_label(y, m)}")
-
-            for item in grouped_review[claim_month]:
-                with st.container(border=True):
-                    left, right = st.columns([3, 1])
-
-                    with left:
-                        st.markdown(
-                            f"**{item['reimbursement_type']}**  \n"
-                            f"Invoice {item['invoice_no']}"
-                        )
-
-                    with right:
-                        st.markdown(
-                            f"**₹{item['invoice_amount']:,.2f}**  \n"
-                            f"<span style='font-size:12px;color:#5c43d4;'>"
-                            f"Eligible ₹{item['eligible_amount']:,.2f}"
-                            f"</span>",
-                            unsafe_allow_html=True,
-                        )
+            y, m = parse_month_key(item["claim_month"])
+            review_html += f"""
+            <div class="review-row">
+                <div style="display:flex;justify-content:space-between;gap:20px;">
+                    <div>
+                        <div class="review-month">{escape(month_label(y,m))}</div>
+                        <div class="review-type">{escape(item["reimbursement_type"])} • Invoice {item["invoice_no"]}</div>
+                    </div>
+                    <div class="review-amount">
+                        ₹{item["invoice_amount"]:,.2f}
+                        <div style="font-size:11px;color:#5c43d4;">Eligible ₹{item["eligible_amount"]:,.2f}</div>
+                    </div>
+                </div>
+            </div>
+            """
+        review_html += "</div>"
+        st.html(review_html)
 
     st.markdown(
         f"""
@@ -896,7 +862,7 @@ def reimbursement_portal():
     if submit:
         errors = []
 
-        today = reimbursement_today()
+        today = date.today()
         if today.day > REIMBURSEMENT_CUTOFF_DAY:
             ny, nm = add_months(today.year, today.month, 1)
             errors.append(
