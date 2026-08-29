@@ -216,14 +216,21 @@ def google_clients():
             "Add gspread, google-auth and google-api-python-client to requirements.txt."
         )
 
-    raw = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
-    if not raw:
-        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON is missing from Streamlit Secrets.")
+    # Your Streamlit Secrets store the service account as a TOML section:
+    # [google_service_account]
+    # Therefore we read that section directly instead of looking for
+    # a single GOOGLE_SERVICE_ACCOUNT_JSON secret.
+    if "google_service_account" not in st.secrets:
+        raise RuntimeError(
+            "google_service_account is missing from Streamlit Secrets."
+        )
 
-    if isinstance(raw, dict):
-        info = dict(raw)
-    else:
-        info = json.loads(str(raw))
+    try:
+        info = dict(st.secrets["google_service_account"])
+    except Exception as e:
+        raise RuntimeError(
+            f"Unable to read google_service_account from Streamlit Secrets: {e}"
+        )
 
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -594,21 +601,17 @@ def reimbursement_portal():
         st.markdown(f'<div class="info-card"><div class="info-label">Company Email</div><div class="info-value">{escape(st.session_state.emp_email)}</div></div>', unsafe_allow_html=True)
     with c3:
         today = date.today()
-        submission_y, submission_m = current_submission_month()
-        deadline = f"{calendar.month_name[submission_m]} {submission_y}"
-        st.markdown(
-            f'<div class="info-card"><div class="info-label">Submission Deadline</div>'
-            f'<div class="info-value">Before the 22nd • {deadline}</div></div>',
-            unsafe_allow_html=True,
-        )
+        deadline = "Next month" if today.day > REIMBURSEMENT_CUTOFF_DAY else f"{calendar.month_name[today.month]} {REIMBURSEMENT_CUTOFF_DAY}"
+        st.markdown(f'<div class="info-card"><div class="info-label">Submission Deadline</div><div class="info-value">Before the 22nd • {deadline}</div></div>', unsafe_allow_html=True)
 
-    # The active submission window is the current month until the 22nd,
-    # and the next month from the 23rd onward.
-    submission_y, submission_m = current_submission_month()
-    st.success(
-        f"Reimbursement submissions are open for {calendar.month_name[submission_m]} "
-        f"{submission_y} until {calendar.month_name[submission_m]} {REIMBURSEMENT_CUTOFF_DAY}."
-    )
+    if today.day > REIMBURSEMENT_CUTOFF_DAY:
+        ny, nm = add_months(today.year, today.month, 1)
+        st.warning(
+            f"The {calendar.month_name[today.month]} {today.year} submission window has closed. "
+            f"Please submit in {calendar.month_name[nm]} {ny}, before the 22nd."
+        )
+    else:
+        st.success(f"Reimbursement submissions are open until {calendar.month_name[today.month]} {REIMBURSEMENT_CUTOFF_DAY}.")
 
     st.markdown(
         """
@@ -836,10 +839,7 @@ def reimbursement_portal():
             </div>
             """
         review_html += "</div>"
-        # Use Streamlit's dedicated HTML renderer here instead of Markdown's
-        # HTML handling. This prevents the generated review markup from ever
-        # appearing as literal HTML text in the UI.
-        st.html(review_html)
+        st.markdown(review_html, unsafe_allow_html=True)
 
     st.markdown(
         f"""
@@ -869,10 +869,12 @@ def reimbursement_portal():
     if submit:
         errors = []
 
-        # Do not reject submissions merely because today's calendar date is
-        # after the 22nd. From the 23rd onward, the active window rolls over
-        # to the next month (see current_submission_month()).
-        # Therefore, August 23-31, for example, is a valid September window.
+        today = date.today()
+        if today.day > REIMBURSEMENT_CUTOFF_DAY:
+            ny, nm = add_months(today.year, today.month, 1)
+            errors.append(
+                f"The current submission window has closed. Please submit in {calendar.month_name[nm]} {ny}, before the 22nd."
+            )
 
         if not declaration:
             errors.append("Please confirm the declaration before submitting.")
@@ -1127,169 +1129,6 @@ with st.sidebar:
 if st.session_state.current_page == "Reimbursement":
     reimbursement_portal()
     st.stop()
-
-# ============================================================
-# POLICY ASSISTANT — ORIGINAL DARK THEME
-# ============================================================
-# This styling is applied ONLY when the Policy Assistant is open.
-# The Reimbursement Portal keeps its existing light design.
-st.markdown(
-    """
-    <style>
-    /* Main Policy Assistant background */
-    .stApp,
-    [data-testid="stAppViewContainer"],
-    [data-testid="stMain"] {
-        background: #0b0f14 !important;
-        color: #f1f3f7 !important;
-    }
-
-    /* Keep the main page spacing/layout */
-    .block-container {
-        background: #0b0f14 !important;
-    }
-
-    /* Sidebar — matches the earlier Policy Assistant screenshot */
-    section[data-testid="stSidebar"],
-    section[data-testid="stSidebar"] > div {
-        background: #20212a !important;
-    }
-
-    section[data-testid="stSidebar"] * {
-        color: #f1f3f7;
-    }
-
-    section[data-testid="stSidebar"] .stCaption {
-        color: #9da2b0 !important;
-    }
-
-    section[data-testid="stSidebar"] hr {
-        border-color: #393b46 !important;
-    }
-
-    /* Sidebar buttons */
-    section[data-testid="stSidebar"] div[data-testid="stButton"] button {
-        background: #292b35 !important;
-        border: 1px solid #3d3f4a !important;
-        color: #f1f3f7 !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {
-        background: #31333e !important;
-        border-color: #555766 !important;
-    }
-
-    /* Policy Assistant title/subtitle */
-    .brand-title {
-        color: #f1f3f7 !important;
-    }
-
-    .brand-sub {
-        color: #9da2b0 !important;
-    }
-
-    /* Private HR conversation card — intentionally remains light,
-       matching the screenshot */
-    .info-card {
-        background: #eef2f7 !important;
-        border: 1px solid #d9dee8 !important;
-        color: #252d40 !important;
-        box-shadow: none !important;
-    }
-
-    .info-card b {
-        color: #252d40 !important;
-    }
-
-    .info-card span {
-        color: #667085 !important;
-    }
-
-    /* Chat messages */
-    [data-testid="stChatMessage"] {
-        background: transparent !important;
-        color: #f1f3f7 !important;
-    }
-
-    [data-testid="stChatMessage"] p,
-    [data-testid="stChatMessage"] li,
-    [data-testid="stChatMessage"] span,
-    [data-testid="stChatMessage"] strong,
-    [data-testid="stChatMessage"] em {
-        color: #f1f3f7 !important;
-    }
-
-    /* Chat input */
-    div[data-testid="stChatInput"] {
-        background: #181a22 !important;
-        border: 1px solid #a83e4d !important;
-        border-radius: 10px !important;
-        box-shadow: none !important;
-    }
-
-    div[data-testid="stChatInput"] textarea {
-        background: #181a22 !important;
-        color: #f1f3f7 !important;
-        caret-color: #ffffff !important;
-    }
-
-    div[data-testid="stChatInput"] textarea::placeholder {
-        color: #858997 !important;
-    }
-
-    /* Send button */
-    div[data-testid="stChatInput"] button {
-        background: #ff5555 !important;
-        color: #ffffff !important;
-        border: 0 !important;
-        border-radius: 8px !important;
-    }
-
-    /* Right-hand HR panel */
-    .main h1,
-    .main h2,
-    .main h3,
-    .main h4,
-    .main h5,
-    .main h6 {
-        color: #f1f3f7 !important;
-    }
-
-    .main p,
-    .main li,
-    .main label,
-    .main .stCaption {
-        color: #d5d8df;
-    }
-
-    /* Right-side buttons */
-    .main div[data-testid="stLinkButton"] a,
-    .main div[data-testid="stButton"] button {
-        background: #151820 !important;
-        color: #f1f3f7 !important;
-        border: 1px solid #30333e !important;
-    }
-
-    /* Primary HR booking button remains red like the screenshot */
-    .main div[data-testid="stLinkButton"] a[kind="primary"] {
-        background: #ff5555 !important;
-        border-color: #ff5555 !important;
-        color: #ffffff !important;
-    }
-
-    /* Dividers */
-    .main hr {
-        border-color: #30323d !important;
-    }
-
-    /* Warnings/errors/success messages remain readable */
-    .main [data-testid="stAlert"] {
-        color: #f1f3f7;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # ============================================================
 # POLICY PAGE
