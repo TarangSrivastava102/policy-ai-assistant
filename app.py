@@ -73,7 +73,106 @@ html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 #MainMenu, footer, header { visibility: hidden; }
-.stApp { background: #f7f8fc; }
+/* Main application background */
+.stApp {
+    background: #1e1f23 !important;
+    color: #f3f4f6 !important;
+}
+
+/* Keep the reimbursement portal cards light */
+
+/* AI chat messages */
+div[data-testid="stChatMessage"] {
+    background: #292b31 !important;
+    border: 1px solid #3a3d45 !important;
+    border-radius: 14px !important;
+    padding: 16px 18px !important;
+    margin: 12px 0 !important;
+}
+
+/* User messages */
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+    background: #34363d !important;
+}
+
+/* Assistant messages */
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+    background: #25272c !important;
+}
+
+/* Text inside chat messages */
+div[data-testid="stChatMessage"] p,
+div[data-testid="stChatMessage"] li,
+div[data-testid="stChatMessage"] span {
+    color: #f1f3f5 !important;
+}
+
+/* Headings inside AI answers */
+div[data-testid="stChatMessage"] h1,
+div[data-testid="stChatMessage"] h2,
+div[data-testid="stChatMessage"] h3,
+div[data-testid="stChatMessage"] h4 {
+    color: #ffffff !important;
+}
+
+/* Code blocks */
+div[data-testid="stChatMessage"] pre {
+    background: #17181c !important;
+    border: 1px solid #3b3e46 !important;
+    color: #f3f4f6 !important;
+}
+
+div[data-testid="stChatMessage"] code {
+    background: #17181c !important;
+    color: #e5e7eb !important;
+}
+
+/* Chat input */
+div[data-testid="stChatInput"] {
+    background: #25272c !important;
+    border: 1px solid #454851 !important;
+    border-radius: 14px !important;
+}
+
+div[data-testid="stChatInput"] textarea {
+    background: #25272c !important;
+    color: #ffffff !important;
+}
+
+div[data-testid="stChatInput"] textarea::placeholder {
+    color: #9ca3af !important;
+}
+
+div[data-testid="stChatInput"]:focus-within {
+    border-color: #6b4de6 !important;
+    box-shadow: 0 0 0 1px #6b4de6 !important;
+}
+
+/* Policy Assistant text */
+.brand-title { color: #ffffff !important; }
+.brand-sub { color: #aeb4c0 !important; }
+
+/* Private HR conversation card */
+.info-card {
+    background: #292b31 !important;
+    border-color: #3a3d45 !important;
+}
+.info-card b { color: #ffffff !important; }
+.info-card span { color: #b7bdc8 !important; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: #18191d !important;
+}
+
+/* General text in dark areas */
+.stMarkdown, div[data-testid="stCaptionContainer"] {
+    color: #f3f4f6;
+}
+
+/* Dividers */
+hr { border-color: #3a3d45 !important; }
+
 .block-container { max-width: 1440px !important; padding: 28px 42px 40px !important; }
 
 .brand-title { font-size: 24px; font-weight: 800; color:#17233c; letter-spacing:-.4px; }
