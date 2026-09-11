@@ -173,6 +173,114 @@ section[data-testid="stSidebar"] {
 /* Dividers */
 hr { border-color: #3a3d45 !important; }
 
+/* ========================================================
+   REIMBURSEMENT PORTAL - HIGH CONTRAST ON DARK BACKGROUND
+   ======================================================== */
+.portal-hero {
+    background: linear-gradient(135deg,#ffffff 0%,#f6f3ff 100%) !important;
+}
+.portal-kicker { color:#6b4de6 !important; }
+.portal-title { color:#17233c !important; }
+.portal-subtitle { color:#52627a !important; }
+
+/* Top employee/company/deadline cards */
+.info-card {
+    background:#292b31 !important;
+    border:1px solid #3a3d45 !important;
+}
+.info-label { color:#aeb7c8 !important; }
+.info-value { color:#ffffff !important; }
+
+/* Green/blue Streamlit alerts remain readable */
+div[data-testid="stAlert"] p,
+div[data-testid="stAlert"] span {
+    color:#ffffff !important;
+}
+
+/* Cycle explanation */
+.rule-strip {
+    background:#ffffff !important;
+    border:1px solid #e3e6ee !important;
+}
+.rule-strip strong { color:#17233c !important; }
+.rule-strip span { color:#52627a !important; }
+
+/* Section headings on the dark page */
+.section-title { color:#ffffff !important; }
+.section-caption { color:#aeb7c8 !important; }
+
+/* Month cards */
+.month-card {
+    background:#292b31 !important;
+    border:1px solid #3a3d45 !important;
+    box-shadow:none !important;
+}
+.month-heading { color:#ffffff !important; }
+.month-caption { color:#aeb7c8 !important; }
+
+/* Reimbursement type cards */
+.type-card {
+    background:#23252a !important;
+    border:1px solid #3a3d45 !important;
+}
+.type-title { color:#ffffff !important; }
+.type-subtitle { color:#aeb7c8 !important; }
+
+/* Eligible amount */
+.eligible-box {
+    background:#302a4a !important;
+    border-color:#51458a !important;
+}
+.eligible-label { color:#c7bcff !important; }
+.eligible-value { color:#ffffff !important; }
+
+/* Review area */
+.review-card {
+    background:#292b31 !important;
+    border-color:#3a3d45 !important;
+}
+.review-row { border-bottom-color:#3a3d45 !important; }
+.review-month { color:#ffffff !important; }
+.review-type { color:#aeb7c8 !important; }
+.review-amount { color:#ffffff !important; }
+
+/* Native Streamlit controls used by reimbursement portal */
+div[data-testid="stMultiSelect"] label,
+div[data-testid="stNumberInput"] label,
+div[data-testid="stFileUploader"] label {
+    color:#f3f4f6 !important;
+}
+div[data-testid="stMultiSelect"] [data-baseweb="select"],
+div[data-testid="stNumberInput"] input,
+div[data-testid="stFileUploaderDropzone"] {
+    background:#292b31 !important;
+    color:#ffffff !important;
+    border-color:#454851 !important;
+}
+div[data-testid="stMultiSelect"] [data-baseweb="select"] *,
+div[data-testid="stNumberInput"] input {
+    color:#ffffff !important;
+}
+div[data-testid="stMultiSelect"] input::placeholder,
+div[data-testid="stNumberInput"] input::placeholder {
+    color:#aeb7c8 !important;
+}
+
+/* Captions and helper text throughout reimbursement portal */
+div[data-testid="stCaptionContainer"] p,
+div[data-testid="stCaptionContainer"] span {
+    color:#aeb7c8 !important;
+}
+
+/* Expander text */
+div[data-testid="stExpander"] {
+    border-color:#454851 !important;
+}
+div[data-testid="stExpander"] summary,
+div[data-testid="stExpander"] summary span {
+    color:#ffffff !important;
+}
+
 .block-container { max-width: 1440px !important; padding: 28px 42px 40px !important; }
 
 .brand-title { font-size: 24px; font-weight: 800; color:#17233c; letter-spacing:-.4px; }
