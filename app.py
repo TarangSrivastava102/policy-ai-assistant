@@ -423,14 +423,15 @@ def google_clients():
             "Add gspread, google-auth and google-api-python-client to requirements.txt."
         )
 
-    raw = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
-    if not raw:
-        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON is missing from Streamlit Secrets.")
+    raw = get_secret("google_service_account")
 
-    if isinstance(raw, dict):
-        info = dict(raw)
-    else:
-        info = json.loads(str(raw))
+if not raw:
+    raise RuntimeError("google_service_account is missing from Streamlit Secrets.")
+
+if isinstance(raw, dict):
+    info = dict(raw)
+else:
+    info = json.loads(str(raw))
 
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
