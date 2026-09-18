@@ -1285,7 +1285,7 @@ if not st.user.is_logged_in:
     st.markdown('<div class="gm-login-marker"></div>', unsafe_allow_html=True)
 
     st.markdown(
-        f"""
+        textwrap.dedent(f"""
         <div class="gm-login-shell">
             <div class="gm-login-left">
                 <div class="gm-login-brand">
@@ -1344,7 +1344,7 @@ if not st.user.is_logged_in:
                     <div class="gm-login-company-line">🔒 &nbsp; <span>Sign in with your company account</span></div>
                 </div>
                 <div class="gm-login-button-wrap">
-        """,
+        """),
         unsafe_allow_html=True,
     )
 
@@ -1352,11 +1352,11 @@ if not st.user.is_logged_in:
         st.login()
 
     st.markdown(
-        """
+        textwrap.dedent("""
                 </div>
             </div>
         </div>
-        """,
+        """),
         unsafe_allow_html=True,
     )
     st.stop()
