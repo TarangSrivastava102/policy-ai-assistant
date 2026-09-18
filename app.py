@@ -11,6 +11,7 @@ import base64
 import textwrap
 import calendar
 import json
+import ast
 import uuid
 from datetime import date, datetime
 
@@ -431,8 +432,24 @@ def google_clients():
 
     if isinstance(raw, dict):
         info = dict(raw)
+    elif isinstance(raw, str):
+        # Handle both a JSON string and a Python-dict-style string.
+        try:
+            info = json.loads(raw)
+        except json.JSONDecodeError:
+            try:
+                info = ast.literal_eval(raw)
+            except (ValueError, SyntaxError) as exc:
+                raise RuntimeError(
+                    "google_service_account secret could not be parsed. "
+                    "Please check the [google_service_account] section in Streamlit Secrets."
+                ) from exc
+        if not isinstance(info, dict):
+            raise RuntimeError(
+                "google_service_account secret must contain service-account fields."
+            )
     else:
-        info = json.loads(str(raw))
+        info = dict(raw)
 
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
