@@ -178,6 +178,71 @@ section[data-testid="stSidebar"] {
 }
 
 /* Dividers */
+/* Login page only - restored light landing-page design */
+.gm-login-marker { display:none; }
+.stApp:has(.gm-login-marker) {
+    background: #f8f9fd !important;
+    color: #17233c !important;
+}
+.stApp:has(.gm-login-marker) section[data-testid="stSidebar"] { display:none !important; }
+.stApp:has(.gm-login-marker) .main .block-container {
+    max-width: 1280px !important;
+    padding-top: 52px !important;
+    padding-bottom: 40px !important;
+}
+.gm-login-shell {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 62px;
+    align-items: center;
+}
+.gm-login-brand { display:flex; align-items:center; gap:18px; }
+.gm-login-brand .brand-logo { width:90px !important; height:90px !important; object-fit:contain; }
+.gm-login-brand-title { font-size:30px; font-weight:800; color:#17233c; }
+.gm-login-brand-sub { color:#5c4bb5; font-size:18px; font-weight:700; margin-top:7px; }
+.gm-login-brand-line { width:70px; height:3px; background:#6547ed; margin-top:17px; border-radius:3px; }
+.gm-login-heading { font-size:29px; line-height:1.25; color:#17233c; margin:57px 0 13px; }
+.gm-login-description { font-size:16px; line-height:1.7; color:#667085; max-width:650px; margin:0; }
+.gm-login-features { display:grid; grid-template-columns:1fr 1fr; gap:31px 42px; margin-top:43px; }
+.gm-login-feature { display:flex; gap:16px; align-items:flex-start; }
+.gm-login-feature-icon {
+    width:58px; height:58px; min-width:58px; border-radius:18px;
+    background:#f0efff; color:#5c4bb5; display:flex; align-items:center; justify-content:center;
+    font-size:25px; font-weight:700;
+}
+.gm-login-feature-title { font-size:16px; font-weight:800; color:#17233c; margin:2px 0 8px; }
+.gm-login-feature-text { font-size:14px; line-height:1.55; color:#737b8c; }
+.gm-login-right { min-width:0; }
+.gm-login-card {
+    background:#fff; border:1px solid #e4e7ef; border-radius:22px;
+    box-shadow:0 14px 40px rgba(32,35,58,.08); overflow:hidden;
+}
+.gm-login-lock {
+    width:76px; height:76px; margin:26px auto 12px; border-radius:50%;
+    background:#f0efff; display:flex; align-items:center; justify-content:center; font-size:35px;
+}
+.gm-login-card-title { text-align:center; font-size:30px; font-weight:800; color:#17233c; }
+.gm-login-card-sub { text-align:center; color:#747d8e; font-size:15px; margin:9px 20px 27px; }
+.gm-login-divider { height:1px; background:#e8eaf0; }
+.gm-login-company-line { padding:24px 28px; color:#5c4bb5; font-weight:700; font-size:15px; }
+.gm-login-button-wrap { margin-top:18px; }
+.stApp:has(.gm-login-marker) div[data-testid="stButton"] > button[kind="primary"] {
+    height:58px !important; border-radius:12px !important;
+    background:#6547ed !important; border:1px solid #6547ed !important;
+    color:#fff !important; font-weight:700 !important; font-size:15px !important;
+    box-shadow:none !important;
+}
+.stApp:has(.gm-login-marker) div[data-testid="stButton"] > button[kind="primary"]:hover {
+    background:#5839dc !important; border-color:#5839dc !important;
+}
+@media (max-width: 900px) {
+    .gm-login-shell { grid-template-columns:1fr; gap:35px; }
+    .gm-login-features { gap:24px; }
+}
+
+
 hr { border-color: #3a3d45 !important; }
 
 /* ========================================================
@@ -1215,37 +1280,82 @@ if not st.user.is_logged_in:
     else:
         logo_html = '<div style="width:90px;height:90px;border-radius:20px;background:#6547ed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:50px;font-weight:800;">G</div>'
 
+    # Login-only marker. This lets us change the first page appearance
+    # without changing the authenticated portal.
+    st.markdown('<div class="gm-login-marker"></div>', unsafe_allow_html=True)
+
     st.markdown(
         f"""
-        <div style="max-width:1050px;margin:80px auto;display:grid;grid-template-columns:1.1fr .9fr;gap:45px;align-items:center;">
-            <div>
-                <div style="display:flex;align-items:center;gap:18px;">
+        <div class="gm-login-shell">
+            <div class="gm-login-left">
+                <div class="gm-login-brand">
                     {logo_html}
                     <div>
-                        <div style="font-size:30px;font-weight:800;color:#17233c;">Germane Media LLC</div>
-                        <div style="color:#6547ed;font-weight:700;margin-top:5px;">Internal HR Portal</div>
+                        <div class="gm-login-brand-title">Germane Media LLC</div>
+                        <div class="gm-login-brand-sub">GM Policy Assistant • Internal HR Portal</div>
+                        <div class="gm-login-brand-line"></div>
                     </div>
                 </div>
-                <h1 style="font-size:32px;color:#17233c;margin-top:48px;">Your Intelligent HR Policy Companion</h1>
-                <p style="font-size:16px;line-height:1.7;color:#667085;max-width:600px;">
-                    Get accurate policy answers, submit employee reimbursements and connect directly with HR.
+
+                <h1 class="gm-login-heading">Your Intelligent HR Policy Companion</h1>
+                <p class="gm-login-description">
+                    Get instant, accurate answers to your policy questions, understand company guidelines,
+                    and connect with HR for personalized support — anytime, anywhere.
                 </p>
+
+                <div class="gm-login-features">
+                    <div class="gm-login-feature">
+                        <div class="gm-login-feature-icon">□</div>
+                        <div>
+                            <div class="gm-login-feature-title">Instant Policy Answers</div>
+                            <div class="gm-login-feature-text">Accurate responses based on Germane Media LLC Employee Policy Handbook.</div>
+                        </div>
+                    </div>
+                    <div class="gm-login-feature">
+                        <div class="gm-login-feature-icon">♟</div>
+                        <div>
+                            <div class="gm-login-feature-title">Secure &amp; Confidential</div>
+                            <div class="gm-login-feature-text">Your conversations are private, secure, and associated with your company account.</div>
+                        </div>
+                    </div>
+                    <div class="gm-login-feature">
+                        <div class="gm-login-feature-icon">♧</div>
+                        <div>
+                            <div class="gm-login-feature-title">Direct HR Support</div>
+                            <div class="gm-login-feature-text">Escalate questions to HR or schedule a confidential 15-minute discussion.</div>
+                        </div>
+                    </div>
+                    <div class="gm-login-feature">
+                        <div class="gm-login-feature-icon">♟</div>
+                        <div>
+                            <div class="gm-login-feature-title">For Employees Only</div>
+                            <div class="gm-login-feature-text">This portal is restricted to active Germane Media LLC employees.</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="background:#fff;border:1px solid #e3e6ee;border-radius:22px;padding:38px;box-shadow:0 14px 40px rgba(32,35,58,.08);">
-                <div style="text-align:center;font-size:46px;">🔒</div>
-                <div style="text-align:center;font-size:30px;font-weight:800;color:#17233c;margin-top:12px;">Welcome Back!</div>
-                <div style="text-align:center;color:#747d8e;margin:8px 0 25px;">Sign in with your company Google Workspace account.</div>
-            """,
+
+            <div class="gm-login-right">
+                <div class="gm-login-card">
+                    <div class="gm-login-lock">🔒</div>
+                    <div class="gm-login-card-title">Welcome Back!</div>
+                    <div class="gm-login-card-sub">Sign in to access the GM Policy Assistant</div>
+                    <div class="gm-login-divider"></div>
+                    <div class="gm-login-company-line">🔒 &nbsp; <span>Sign in with your company account</span></div>
+                </div>
+                <div class="gm-login-button-wrap">
+        """,
         unsafe_allow_html=True,
     )
-    if st.button("G   Sign in with Google", type="primary", use_container_width=True, key="login_button"):
+
+    if st.button("G  Sign in with Google", type="primary", use_container_width=True, key="login_button"):
         st.login()
+
     st.markdown(
-        f"""
-                <div style="margin-top:20px;padding:15px;border-radius:11px;background:#faf9ff;border:1px solid #e3ddff;color:#5a43c9;font-size:13px;">
-                    This portal is restricted to active <b>@{COMPANY_DOMAIN}</b> employees.
+        """
                 </div>
-                </div>
+            </div>
+        </div>
         """,
         unsafe_allow_html=True,
     )
