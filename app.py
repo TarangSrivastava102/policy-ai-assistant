@@ -424,22 +424,35 @@ def google_clients():
         )
 
     raw = get_secret("google_service_account")
+    if not raw:
+        raise RuntimeError(
+            "google_service_account is missing from Streamlit Secrets."
+        )
 
-if not raw:
-    raise RuntimeError("google_service_account is missing from Streamlit Secrets.")
-
-if isinstance(raw, dict):
-    info = dict(raw)
-else:
-    info = json.loads(str(raw))
+    if isinstance(raw, dict):
+        info = dict(raw)
+    else:
+        info = json.loads(str(raw))
 
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_info(info, scopes=scopes)
+
+    creds = Credentials.from_service_account_info(
+        info,
+        scopes=scopes
+    )
+
     gc = gspread.authorize(creds)
-    drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    drive = build(
+        "drive",
+        "v3",
+        credentials=creds,
+        cache_discovery=False
+    )
+
     return gc, drive
 
 def get_or_create_spreadsheet():
