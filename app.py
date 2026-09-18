@@ -62,6 +62,12 @@ REIMBURSEMENT_TYPES = {
 REIMBURSEMENT_SHEET_NAME = "Germane Media - Employee Reimbursements"
 REIMBURSEMENT_DRIVE_FOLDER_NAME = "Germane Media - Reimbursement Bills"
 
+# Google Shared Drive destination for reimbursement invoices.
+# Service accounts do not have personal Drive storage, so invoices must be
+# uploaded into a Shared Drive.
+REIMBURSEMENT_SHARED_DRIVE_ID = "0ABjzNoo-x_RwUk9PVA"
+REIMBURSEMENT_DRIVE_FOLDER_ID = "1Qrozesa14l5UPoCqU-zdVfR0GDNHRTum"
+
 # ============================================================
 # UI
 # ============================================================
@@ -554,31 +560,9 @@ def get_eligible_month_options(employee_email):
     return options
 
 def get_or_create_drive_folder():
-    _, drive = google_clients()
-    q = (
-        "mimeType='application/vnd.google-apps.folder' "
-        "and name='Germane Media - Reimbursement Bills' "
-        "and trashed=false"
-    )
-    result = drive.files().list(
-        q=q,
-        spaces="drive",
-        fields="files(id,name,webViewLink)",
-        pageSize=10
-    ).execute()
-    files = result.get("files", [])
-    if files:
-        return files[0]["id"]
-
-    metadata = {
-        "name": REIMBURSEMENT_DRIVE_FOLDER_NAME,
-        "mimeType": "application/vnd.google-apps.folder",
-    }
-    folder = drive.files().create(
-        body=metadata,
-        fields="id,webViewLink"
-    ).execute()
-    return folder["id"]
+    # The reimbursement folder already exists inside the Shared Drive.
+    # Return its ID directly instead of trying to create a folder in My Drive.
+    return REIMBURSEMENT_DRIVE_FOLDER_ID
 
 def upload_to_drive(uploaded_file, employee_name, claim_month, reimbursement_type, invoice_no):
     _, drive = google_clients()
@@ -607,6 +591,7 @@ def upload_to_drive(uploaded_file, employee_name, claim_month, reimbursement_typ
         body=metadata,
         media_body=media,
         fields="id,name,webViewLink",
+        supportsAllDrives=True,
     ).execute()
 
     return created.get("id"), created.get("name"), created.get("webViewLink")
