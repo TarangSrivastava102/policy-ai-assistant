@@ -200,6 +200,7 @@ section[data-testid="stSidebar"] {
 }
 .gm-login-brand { display:flex; align-items:center; gap:18px; }
 .gm-login-brand .brand-logo { width:90px !important; height:90px !important; object-fit:contain; }
+.gm-login-brand .brand-logo-fallback { width:90px; height:90px; border-radius:20px; background:#6547ed; color:#fff; display:flex; align-items:center; justify-content:center; font-size:50px; font-weight:800; }
 .gm-login-brand-title { font-size:30px; font-weight:800; color:#17233c; }
 .gm-login-brand-sub { color:#5c4bb5; font-size:18px; font-weight:700; margin-top:7px; }
 .gm-login-brand-line { width:70px; height:3px; background:#6547ed; margin-top:17px; border-radius:3px; }
@@ -228,6 +229,14 @@ section[data-testid="stSidebar"] {
 .gm-login-divider { height:1px; background:#e8eaf0; }
 .gm-login-company-line { padding:24px 28px; color:#5c4bb5; font-weight:700; font-size:15px; }
 .gm-login-button-wrap { margin-top:18px; }
+.stApp:has(.gm-login-marker) div[data-testid="stButton"] {
+    width: calc(47% - 12px) !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    margin-top: -76px !important;
+    position: relative !important;
+    z-index: 5 !important;
+}
 .stApp:has(.gm-login-marker) div[data-testid="stButton"] > button[kind="primary"] {
     height:58px !important; border-radius:12px !important;
     background:#6547ed !important; border:1px solid #6547ed !important;
@@ -1278,87 +1287,44 @@ if not st.user.is_logged_in:
         logo_b64 = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
         logo_html = f'<img class="brand-logo" src="data:image/png;base64,{logo_b64}" alt="Germane Media LLC logo">'
     else:
-        logo_html = '<div style="width:90px;height:90px;border-radius:20px;background:#6547ed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:50px;font-weight:800;">G</div>'
+        logo_html = '<div class="brand-logo-fallback">G</div>'
 
-    # Login-only marker. This lets us change the first page appearance
-    # without changing the authenticated portal.
     st.markdown('<div class="gm-login-marker"></div>', unsafe_allow_html=True)
 
-    st.markdown(
-        textwrap.dedent(f"""
-        <div class="gm-login-shell">
-            <div class="gm-login-left">
-                <div class="gm-login-brand">
-                    {logo_html}
-                    <div>
-                        <div class="gm-login-brand-title">Germane Media LLC</div>
-                        <div class="gm-login-brand-sub">GM Policy Assistant • Internal HR Portal</div>
-                        <div class="gm-login-brand-line"></div>
-                    </div>
-                </div>
-
-                <h1 class="gm-login-heading">Your Intelligent HR Policy Companion</h1>
-                <p class="gm-login-description">
-                    Get instant, accurate answers to your policy questions, understand company guidelines,
-                    and connect with HR for personalized support — anytime, anywhere.
-                </p>
-
-                <div class="gm-login-features">
-                    <div class="gm-login-feature">
-                        <div class="gm-login-feature-icon">□</div>
-                        <div>
-                            <div class="gm-login-feature-title">Instant Policy Answers</div>
-                            <div class="gm-login-feature-text">Accurate responses based on Germane Media LLC Employee Policy Handbook.</div>
-                        </div>
-                    </div>
-                    <div class="gm-login-feature">
-                        <div class="gm-login-feature-icon">♟</div>
-                        <div>
-                            <div class="gm-login-feature-title">Secure &amp; Confidential</div>
-                            <div class="gm-login-feature-text">Your conversations are private, secure, and associated with your company account.</div>
-                        </div>
-                    </div>
-                    <div class="gm-login-feature">
-                        <div class="gm-login-feature-icon">♧</div>
-                        <div>
-                            <div class="gm-login-feature-title">Direct HR Support</div>
-                            <div class="gm-login-feature-text">Escalate questions to HR or schedule a confidential 15-minute discussion.</div>
-                        </div>
-                    </div>
-                    <div class="gm-login-feature">
-                        <div class="gm-login-feature-icon">♟</div>
-                        <div>
-                            <div class="gm-login-feature-title">For Employees Only</div>
-                            <div class="gm-login-feature-text">This portal is restricted to active Germane Media LLC employees.</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="gm-login-right">
-                <div class="gm-login-card">
-                    <div class="gm-login-lock">🔒</div>
-                    <div class="gm-login-card-title">Welcome Back!</div>
-                    <div class="gm-login-card-sub">Sign in to access the GM Policy Assistant</div>
-                    <div class="gm-login-divider"></div>
-                    <div class="gm-login-company-line">🔒 &nbsp; <span>Sign in with your company account</span></div>
-                </div>
-                <div class="gm-login-button-wrap">
-        """),
-        unsafe_allow_html=True,
+    # IMPORTANT: keep the HTML unindented. Streamlit otherwise interprets
+    # indented multi-line HTML as a Markdown code block.
+    login_html = (
+        '<div class="gm-login-shell">'
+        '<div class="gm-login-left">'
+        '<div class="gm-login-brand">' + logo_html + '<div>'
+        '<div class="gm-login-brand-title">Germane Media LLC</div>'
+        '<div class="gm-login-brand-sub">GM Policy Assistant • Internal HR Portal</div>'
+        '<div class="gm-login-brand-line"></div>'
+        '</div></div>'
+        '<h1 class="gm-login-heading">Your Intelligent HR Policy Companion</h1>'
+        '<p class="gm-login-description">Get instant, accurate answers to your policy questions, understand company guidelines, and connect with HR for personalized support — anytime, anywhere.</p>'
+        '<div class="gm-login-features">'
+        '<div class="gm-login-feature"><div class="gm-login-feature-icon">□</div><div><div class="gm-login-feature-title">Instant Policy Answers</div><div class="gm-login-feature-text">Accurate responses based on Germane Media LLC Employee Policy Handbook.</div></div></div>'
+        '<div class="gm-login-feature"><div class="gm-login-feature-icon">♟</div><div><div class="gm-login-feature-title">Secure &amp; Confidential</div><div class="gm-login-feature-text">Your conversations are private, secure, and associated with your company account.</div></div></div>'
+        '<div class="gm-login-feature"><div class="gm-login-feature-icon">♧</div><div><div class="gm-login-feature-title">Direct HR Support</div><div class="gm-login-feature-text">Escalate questions to HR or schedule a confidential 15-minute discussion.</div></div></div>'
+        '<div class="gm-login-feature"><div class="gm-login-feature-icon">♟</div><div><div class="gm-login-feature-title">For Employees Only</div><div class="gm-login-feature-text">This portal is restricted to active Germane Media LLC employees.</div></div></div>'
+        '</div></div>'
+        '<div class="gm-login-right">'
+        '<div class="gm-login-card">'
+        '<div class="gm-login-lock">🔒</div>'
+        '<div class="gm-login-card-title">Welcome Back!</div>'
+        '<div class="gm-login-card-sub">Sign in to access the GM Policy Assistant</div>'
+        '<div class="gm-login-divider"></div>'
+        '<div class="gm-login-company-line">🔒 &nbsp; <span>Sign in with your company account</span></div>'
+        '</div>'
+        '<div class="gm-login-button-wrap"></div>'
+        '</div></div>'
     )
+    st.markdown(login_html, unsafe_allow_html=True)
 
     if st.button("G  Sign in with Google", type="primary", use_container_width=True, key="login_button"):
         st.login()
 
-    st.markdown(
-        textwrap.dedent("""
-                </div>
-            </div>
-        </div>
-        """),
-        unsafe_allow_html=True,
-    )
     st.stop()
 
 # ============================================================
