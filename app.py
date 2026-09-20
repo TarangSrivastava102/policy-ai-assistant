@@ -820,12 +820,61 @@ def send_reimbursement_hr_email(submission):
 # JOB REFERRAL PORTAL
 # ============================================================
 def get_or_create_job_referral_spreadsheet():
-    gc, _ = google_clients()
+    # IMPORTANT: Do not use gc.create() here. A service account has its own
+    # My Drive storage quota, and creating a new spreadsheet there can fail
+    # with a 403 quota-exceeded error. Instead, create/find the spreadsheet
+    # directly inside the existing referral Drive folder.
+    gc, drive = google_clients()
 
+    sh = None
+
+    # First, look for an existing Job Referral spreadsheet in the referral
+    # folder so we do not create duplicates.
     try:
-        sh = gc.open(JOB_REFERRAL_SHEET_NAME)
-    except gspread.SpreadsheetNotFound:
-        sh = gc.create(JOB_REFERRAL_SHEET_NAME)
+        result = drive.files().list(
+            q=(
+                f"'{JOB_REFERRAL_DRIVE_FOLDER_ID}' in parents "
+                "and trashed = false "
+                "and mimeType = 'application/vnd.google-apps.spreadsheet'"
+            ),
+            spaces="drive",
+            fields="files(id,name)",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+        ).execute()
+
+        for item in result.get("files", []):
+            if item.get("name") == JOB_REFERRAL_SHEET_NAME:
+                sh = gc.open_by_key(item["id"])
+                break
+    except Exception as exc:
+        raise RuntimeError(
+            "Unable to find the Job Referral Google Sheet in the referral "
+            f"Drive folder. Please check that the service account has access "
+            f"to folder {JOB_REFERRAL_DRIVE_FOLDER_ID}. Details: {exc}"
+        ) from exc
+
+    # If the sheet does not exist, create it directly inside the referral
+    # folder. This avoids the service account's My Drive storage quota.
+    if sh is None:
+        try:
+            created = drive.files().create(
+                body={
+                    "name": JOB_REFERRAL_SHEET_NAME,
+                    "mimeType": "application/vnd.google-apps.spreadsheet",
+                    "parents": [JOB_REFERRAL_DRIVE_FOLDER_ID],
+                },
+                fields="id,name",
+                supportsAllDrives=True,
+            ).execute()
+            sh = gc.open_by_key(created["id"])
+        except Exception as exc:
+            raise RuntimeError(
+                "Unable to create the Job Referral Google Sheet inside the "
+                "referral Drive folder. Please make sure the Google service "
+                "account has Editor/Content Manager access to that folder. "
+                f"Details: {exc}"
+            ) from exc
 
     # Make sure HR can open and manage the sheet.
     try:
