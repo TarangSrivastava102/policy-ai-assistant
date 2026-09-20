@@ -1319,15 +1319,9 @@ def job_referral_portal():
 
             with c2:
                 if job["jd_link"]:
-                    # Ensure the JD opens as an external URL rather than being
-                    # treated as a relative link to the Streamlit app.
-                    jd_url = job["jd_link"].strip()
-                    if not jd_url.lower().startswith(("http://", "https://")):
-                        jd_url = "https://" + jd_url.lstrip("/")
-
                     st.link_button(
                         "View Job Opening / JD",
-                        jd_url,
+                        job["jd_link"],
                         use_container_width=True,
                     )
                 else:
