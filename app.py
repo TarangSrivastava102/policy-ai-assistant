@@ -68,6 +68,10 @@ REIMBURSEMENT_DRIVE_FOLDER_NAME = "Germane Media - Reimbursement Bills"
 REIMBURSEMENT_SHARED_DRIVE_ID = "0ABjzNoo-x_RwUk9PVA"
 REIMBURSEMENT_DRIVE_FOLDER_ID = "1Qrozesa14l5UPoCqU-zdVfR0GDNHRTum"
 
+# Job Referral Portal settings
+JOB_REFERRAL_SHEET_NAME = "Germane Media - Job Referrals"
+JOB_REFERRAL_DRIVE_FOLDER_ID = "1CNwDzA4ujA2n2xV34vbtMjbqyHlYYnee"
+
 # ============================================================
 # UI
 # ============================================================
@@ -811,6 +815,501 @@ def send_reimbursement_hr_email(submission):
         server.login(smtp_email, smtp_password)
         server.send_message(msg)
 
+
+# ============================================================
+# JOB REFERRAL PORTAL
+# ============================================================
+def get_or_create_job_referral_spreadsheet():
+    gc, _ = google_clients()
+
+    try:
+        sh = gc.open(JOB_REFERRAL_SHEET_NAME)
+    except gspread.SpreadsheetNotFound:
+        sh = gc.create(JOB_REFERRAL_SHEET_NAME)
+
+    # Make sure HR can open and manage the sheet.
+    try:
+        sh.share(HR_EMAIL, perm_type="user", role="writer", notify=False)
+    except Exception:
+        pass
+
+    try:
+        jobs_ws = sh.worksheet("Job Openings")
+    except gspread.WorksheetNotFound:
+        jobs_ws = sh.add_worksheet(title="Job Openings", rows=500, cols=5)
+
+    job_headers = ["Job Title", "JD Link"]
+    if jobs_ws.row_values(1) != job_headers:
+        jobs_ws.update("A1:B1", [job_headers])
+        try:
+            jobs_ws.freeze(rows=1)
+        except Exception:
+            pass
+
+    try:
+        referrals_ws = sh.worksheet("Referrals")
+    except gspread.WorksheetNotFound:
+        referrals_ws = sh.add_worksheet(title="Referrals", rows=5000, cols=20)
+
+    referral_headers = [
+        "Referral ID",
+        "Date",
+        "Job Title",
+        "JD Link",
+        "Referring Employee",
+        "Employee Email",
+        "Candidate Name",
+        "Candidate Phone",
+        "Candidate Email",
+        "Resume Name",
+        "Resume URL",
+        "Status",
+    ]
+    if referrals_ws.row_values(1) != referral_headers:
+        referrals_ws.update("A1:L1", [referral_headers])
+        try:
+            referrals_ws.freeze(rows=1)
+        except Exception:
+            pass
+
+    return sh, jobs_ws, referrals_ws
+
+
+def get_job_openings():
+    try:
+        _, jobs_ws, _ = get_or_create_job_referral_spreadsheet()
+        rows = jobs_ws.get_all_records()
+    except Exception:
+        return []
+
+    jobs = []
+    for row in rows:
+        title = str(row.get("Job Title", "")).strip()
+        jd_link = str(row.get("JD Link", "")).strip()
+        if title:
+            jobs.append({
+                "job_title": title,
+                "jd_link": jd_link,
+            })
+    return jobs
+
+
+def referral_already_exists(candidate_email, job_title):
+    try:
+        _, _, referrals_ws = get_or_create_job_referral_spreadsheet()
+        rows = referrals_ws.get_all_records()
+    except Exception:
+        return False
+
+    candidate_email = candidate_email.strip().lower()
+    job_title = job_title.strip().lower()
+
+    for row in rows:
+        existing_email = str(row.get("Candidate Email", "")).strip().lower()
+        existing_job = str(row.get("Job Title", "")).strip().lower()
+        if existing_email == candidate_email and existing_job == job_title:
+            return True
+
+    return False
+
+
+def upload_referral_resume(uploaded_file, candidate_name, job_title, referral_id):
+    _, drive = google_clients()
+
+    safe_candidate = "".join(
+        c if c.isalnum() or c in " _-" else "_"
+        for c in candidate_name
+    ).strip()
+
+    safe_job = "".join(
+        c if c.isalnum() or c in " _-" else "_"
+        for c in job_title
+    ).strip()
+
+    original_name = uploaded_file.name
+    suffix = Path(original_name).suffix.lower()
+    filename = f"{referral_id}_{safe_candidate}_{safe_job}{suffix}"
+
+    metadata = {
+        "name": filename,
+        "parents": [JOB_REFERRAL_DRIVE_FOLDER_ID],
+        "description": (
+            f"Employee referral resume for {job_title}. "
+            f"Referral ID: {referral_id}."
+        ),
+    }
+
+    import io
+
+    file_bytes = uploaded_file.getvalue()
+    media = MediaIoBaseUpload(
+        io.BytesIO(file_bytes),
+        mimetype=uploaded_file.type or "application/octet-stream",
+        resumable=False,
+    )
+
+    created = drive.files().create(
+        body=metadata,
+        media_body=media,
+        fields="id,name,webViewLink",
+        supportsAllDrives=True,
+    ).execute()
+
+    file_id = created.get("id")
+    file_url = created.get("webViewLink") or f"https://drive.google.com/file/d/{file_id}/view"
+
+    return file_id, created.get("name"), file_url
+
+
+def save_job_referral(referral):
+    sh, _, referrals_ws = get_or_create_job_referral_spreadsheet()
+
+    referrals_ws.append_row(
+        [
+            referral["referral_id"],
+            referral["date"],
+            referral["job_title"],
+            referral["jd_link"],
+            referral["employee_name"],
+            referral["employee_email"],
+            referral["candidate_name"],
+            referral["candidate_phone"],
+            referral["candidate_email"],
+            referral["resume_name"],
+            referral["resume_url"],
+            "Submitted",
+        ],
+        value_input_option="USER_ENTERED",
+    )
+
+    return sh.url
+
+
+def send_job_referral_emails(referral):
+    if not smtp_is_configured():
+        raise RuntimeError("SMTP_EMAIL / SMTP_PASSWORD is not configured.")
+
+    smtp_email = str(get_secret("SMTP_EMAIL")).strip()
+    smtp_password = str(get_secret("SMTP_PASSWORD")).strip()
+    smtp_host = str(get_secret("SMTP_HOST", "smtp.gmail.com")).strip()
+    smtp_port = int(get_secret("SMTP_PORT", 587))
+
+    # 1. Confirmation email to the employee who made the referral.
+    employee_msg = EmailMessage()
+    employee_msg["Subject"] = (
+        f"Referral Submitted | {referral['job_title']} | {referral['referral_id']}"
+    )
+    employee_msg["From"] = formataddr(("Germane Media Job Referral Portal", smtp_email))
+    employee_msg["To"] = referral["employee_email"]
+
+    employee_msg.set_content(
+        f"Hi {referral['employee_name']},\n\n"
+        f"Your employee referral has been submitted successfully.\n\n"
+        f"Referral ID: {referral['referral_id']}\n"
+        f"Position: {referral['job_title']}\n"
+        f"Candidate: {referral['candidate_name']}\n\n"
+        f"HR has been notified and will review the referral.\n\n"
+        f"Regards,\n"
+        f"Germane Media LLC HR"
+    )
+
+    # 2. Notification email to the candidate.
+    candidate_msg = EmailMessage()
+    candidate_msg["Subject"] = (
+        f"You have been referred for {referral['job_title']} | Germane Media LLC"
+    )
+    candidate_msg["From"] = formataddr(("Germane Media LLC", smtp_email))
+    candidate_msg["To"] = referral["candidate_email"]
+
+    candidate_msg.set_content(
+        f"Hi {referral['candidate_name']},\n\n"
+        f"You have been referred by {referral['employee_name']} "
+        f"for the position of {referral['job_title']} at Germane Media LLC.\n\n"
+        f"Our HR team will review your referral and contact you if your profile "
+        f"is shortlisted for the next stage.\n\n"
+        f"Regards,\n"
+        f"Germane Media LLC HR"
+    )
+
+    # 3. Notification to HR, with the resume attached.
+    hr_msg = EmailMessage()
+    hr_msg["Subject"] = (
+        f"New Employee Referral | {referral['job_title']} | {referral['referral_id']}"
+    )
+    hr_msg["From"] = formataddr(("Germane Media Job Referral Portal", smtp_email))
+    hr_msg["To"] = HR_EMAIL
+    hr_msg["Reply-To"] = referral["employee_email"]
+
+    hr_msg.set_content(
+        f"New employee referral received.\n\n"
+        f"Referral ID: {referral['referral_id']}\n"
+        f"Date: {referral['date']}\n\n"
+        f"Position: {referral['job_title']}\n"
+        f"JD: {referral['jd_link']}\n\n"
+        f"Referring Employee: {referral['employee_name']}\n"
+        f"Employee Email: {referral['employee_email']}\n\n"
+        f"Candidate Name: {referral['candidate_name']}\n"
+        f"Candidate Phone: {referral['candidate_phone']}\n"
+        f"Candidate Email: {referral['candidate_email']}\n\n"
+        f"Resume: {referral['resume_url']}\n"
+    )
+
+    resume_bytes = referral.get("resume_bytes")
+    resume_type = referral.get("resume_type") or "application/octet-stream"
+    resume_name = referral.get("resume_original_name") or referral["resume_name"]
+
+    if resume_bytes:
+        maintype, subtype = (
+            resume_type.split("/", 1)
+            if "/" in resume_type
+            else ("application", "octet-stream")
+        )
+        hr_msg.add_attachment(
+            resume_bytes,
+            maintype=maintype,
+            subtype=subtype,
+            filename=resume_name,
+        )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(smtp_email, smtp_password)
+        server.send_message(employee_msg)
+        server.send_message(candidate_msg)
+        server.send_message(hr_msg)
+
+
+def job_referral_portal():
+    st.markdown(
+        """
+        <div class="portal-hero">
+            <div class="portal-kicker">Employee Referral Program</div>
+            <div class="portal-title">Job Referral Portal</div>
+            <div class="portal-subtitle">
+                Refer suitable candidates for current Germane Media LLC job openings.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    try:
+        jobs = get_job_openings()
+    except Exception as e:
+        st.error(f"Unable to load current job openings. Technical details: {e}")
+        return
+
+    if not jobs:
+        st.info(
+            "There are currently no active job openings available for referral. "
+            "Please check again later."
+        )
+        if st.session_state.is_hr:
+            try:
+                sh, _, _ = get_or_create_job_referral_spreadsheet()
+                st.link_button(
+                    "Open Job Referral Google Sheet",
+                    sh.url,
+                    use_container_width=False,
+                )
+            except Exception as e:
+                st.warning(f"Unable to open the Job Referral Google Sheet: {e}")
+        return
+
+    if st.session_state.is_hr:
+        try:
+            sh, _, _ = get_or_create_job_referral_spreadsheet()
+            st.link_button(
+                "Open Job Referral Google Sheet",
+                sh.url,
+                use_container_width=False,
+            )
+        except Exception:
+            pass
+
+    selected_job = st.session_state.get("selected_referral_job")
+
+    if selected_job:
+        st.markdown(
+            '<div class="section-head"><div class="section-title">Refer a Candidate</div>'
+            '<div class="section-caption">Complete the candidate details below.</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        st.info(f"Position: {selected_job['job_title']}")
+
+        if st.button("← Back to Job Openings", key="back_to_referral_jobs"):
+            st.session_state.selected_referral_job = None
+            st.rerun()
+
+        with st.form("job_referral_form", clear_on_submit=False):
+            candidate_name = st.text_input("Candidate Name *")
+            candidate_phone = st.text_input("Candidate Phone *")
+            candidate_email = st.text_input("Candidate Email *")
+            resume = st.file_uploader(
+                "Upload Resume *",
+                accept_multiple_files=False,
+                help="PDF, DOC, DOCX or another resume file format is accepted.",
+            )
+
+            consent = st.checkbox(
+                "I confirm that I have the candidate's permission to share their "
+                "contact details and resume with Germane Media LLC for this job opportunity."
+            )
+
+            submit_referral = st.form_submit_button(
+                "Submit Referral",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submit_referral:
+            errors = []
+
+            candidate_name = candidate_name.strip()
+            candidate_phone = candidate_phone.strip()
+            candidate_email = candidate_email.strip().lower()
+
+            if not candidate_name:
+                errors.append("Please enter the candidate's name.")
+
+            if not candidate_phone:
+                errors.append("Please enter the candidate's phone number.")
+
+            if not candidate_email or "@" not in candidate_email:
+                errors.append("Please enter a valid candidate email address.")
+
+            if resume is None:
+                errors.append("Please upload the candidate's resume.")
+
+            if not consent:
+                errors.append(
+                    "Please confirm that you have the candidate's permission to share their information."
+                )
+
+            if not errors and referral_already_exists(
+                candidate_email,
+                selected_job["job_title"],
+            ):
+                errors.append(
+                    "This candidate has already been referred for this position."
+                )
+
+            if errors:
+                for error in errors:
+                    st.error(error)
+                return
+
+            referral_id = (
+                f"REF-{datetime.now().strftime('%Y%m%d')}-"
+                f"{uuid.uuid4().hex[:6].upper()}"
+            )
+            referral_date = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+            referral = {
+                "referral_id": referral_id,
+                "date": referral_date,
+                "job_title": selected_job["job_title"],
+                "jd_link": selected_job["jd_link"],
+                "employee_name": st.session_state.emp_name,
+                "employee_email": st.session_state.emp_email,
+                "candidate_name": candidate_name,
+                "candidate_phone": candidate_phone,
+                "candidate_email": candidate_email,
+                "resume_original_name": resume.name,
+                "resume_type": resume.type,
+                "resume_bytes": resume.getvalue(),
+            }
+
+            with st.spinner("Submitting referral..."):
+                try:
+                    _, resume_name, resume_url = upload_referral_resume(
+                        resume,
+                        candidate_name,
+                        selected_job["job_title"],
+                        referral_id,
+                    )
+
+                    referral["resume_name"] = resume_name
+                    referral["resume_url"] = resume_url
+
+                    sheet_url = save_job_referral(referral)
+                    send_job_referral_emails(referral)
+
+                    st.session_state.referral_success = {
+                        "referral_id": referral_id,
+                        "job_title": selected_job["job_title"],
+                        "candidate_name": candidate_name,
+                        "sheet_url": sheet_url,
+                    }
+                    st.session_state.selected_referral_job = None
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(
+                        "The referral could not be submitted. "
+                        "Please check the Google Drive, Google Sheet and email configuration. "
+                        f"Technical details: {e}"
+                    )
+                    return
+
+    else:
+        st.markdown(
+            '<div class="section-head"><div class="section-title">Current Job Openings</div>'
+            '<div class="section-caption">Select a position and refer a suitable candidate.</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        for index, job in enumerate(jobs):
+            c1, c2, c3 = st.columns([3.8, 2.2, 1.2])
+
+            with c1:
+                st.markdown(f"**{escape(job['job_title'])}**")
+
+            with c2:
+                if job["jd_link"]:
+                    st.link_button(
+                        "View Job Opening / JD",
+                        job["jd_link"],
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption("JD link not available")
+
+            with c3:
+                if st.button(
+                    "Refer",
+                    key=f"refer_job_{index}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_referral_job = job
+                    st.rerun()
+
+            st.divider()
+
+    if st.session_state.get("referral_success"):
+        success = st.session_state.referral_success
+        st.success(
+            f"Referral submitted successfully. Referral ID: {success['referral_id']}"
+        )
+        st.write(
+            f"Candidate **{success['candidate_name']}** has been referred for "
+            f"**{success['job_title']}**."
+        )
+        st.caption(
+            "A confirmation email has been sent to you, the candidate has been "
+            "notified, and HR has received the referral with the resume."
+        )
+        if st.session_state.is_hr:
+            st.link_button("Open Job Referral Google Sheet", success["sheet_url"])
+
+        if st.button("Submit Another Referral", key="another_referral"):
+            st.session_state.referral_success = None
+            st.rerun()
+
+
 # ============================================================
 # POLICY ASSISTANT
 # ============================================================
@@ -1390,6 +1889,10 @@ with st.sidebar:
         st.session_state.current_page = "Reimbursement"
         st.rerun()
 
+    if st.button("👥 Job Referral Portal", use_container_width=True):
+        st.session_state.current_page = "Job Referral"
+        st.rerun()
+
     st.divider()
     st.markdown("📚 **Company Policy Categories**")
 
@@ -1420,6 +1923,13 @@ with st.sidebar:
 # ============================================================
 if st.session_state.current_page == "Reimbursement":
     reimbursement_portal()
+    st.stop()
+
+# ============================================================
+# JOB REFERRAL PAGE
+# ============================================================
+if st.session_state.current_page == "Job Referral":
+    job_referral_portal()
     st.stop()
 
 # ============================================================
