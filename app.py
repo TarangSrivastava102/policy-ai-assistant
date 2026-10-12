@@ -577,7 +577,7 @@ def google_clients():
     )
 
     return gc, drive
-
+@st.cache_resource(show_spinner=False)
 def get_or_create_spreadsheet():
     gc, _ = google_clients()
     try:
@@ -696,11 +696,14 @@ def upload_to_drive(uploaded_file, employee_name, claim_month, reimbursement_typ
 
     return created.get("id"), created.get("name"), created.get("webViewLink")
 
+
 def save_reimbursement_to_google(submission):
     sh, ws = get_or_create_spreadsheet()
 
+    rows_to_append = []
+
     for item in submission["items"]:
-        ws.append_row(
+        rows_to_append.append(
             [
                 submission["submission_id"],
                 submission["submission_date"],
@@ -715,10 +718,17 @@ def save_reimbursement_to_google(submission):
                 item["document_name"],
                 item["drive_url"],
                 "Submitted",
-            ],
+            ]
+        )
+
+    if rows_to_append:
+        ws.append_rows(
+            rows_to_append,
             value_input_option="USER_ENTERED",
         )
+
     return sh.url
+
 
 # ============================================================
 # EMAIL
@@ -841,6 +851,7 @@ def send_reimbursement_hr_email(submission):
 # ============================================================
 # JOB REFERRAL PORTAL
 # ============================================================
+@st.cache_resource(show_spinner=False)
 def get_or_create_job_referral_spreadsheet():
     gc, _ = google_clients()
 
@@ -896,7 +907,7 @@ def get_or_create_job_referral_spreadsheet():
 
     return sh, jobs_ws, referrals_ws
 
-
+@st.cache_data(ttl=30, show_spinner=False)
 def get_job_openings():
     try:
         _, jobs_ws, _ = get_or_create_job_referral_spreadsheet()
