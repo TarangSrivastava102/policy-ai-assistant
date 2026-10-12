@@ -1932,21 +1932,7 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.markdown("📚 **Company Policy Categories**")
-
-    categories = [
-        "Leave Policy",
-        "Attendance & Work Hours",
-        "Appraisal & Revisions",
-        "Reimbursement",
-        "Probation & Confirmation",
-        "Full & Final Settlement",
-    ]
-    for cat in categories:
-        if st.button(f"📄 {cat}", key=f"category_{cat}", use_container_width=True):
-            st.session_state.current_page = "Policy Assistant"
-            st.session_state.messages.append({"role":"user","content":f"Summarize the key points of the {cat}."})
-            st.rerun()
+    
 
     st.divider()
     st.link_button("💬 Message HR on Google Chat", DIRECT_GOOGLE_CHAT_HR, use_container_width=True)
