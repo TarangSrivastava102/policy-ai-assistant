@@ -176,6 +176,12 @@ section[data-testid="stSidebar"] {
     background: #18191d !important;
 }
 
+/* Keep the sidebar visible: hide Streamlit's collapse/reopen controls */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
 /* General text in dark areas */
 .stMarkdown, div[data-testid="stCaptionContainer"] {
     color: #f3f4f6;
