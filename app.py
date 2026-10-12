@@ -176,11 +176,7 @@ section[data-testid="stSidebar"] {
     background: #18191d !important;
 }
 
-/* Keep the sidebar visible: hide Streamlit's collapse/reopen controls */
-[data-testid="stSidebarCollapseButton"],
-[data-testid="stSidebarCollapsedControl"] {
-    display: none !important;
-}
+
 
 /* General text in dark areas */
 .stMarkdown, div[data-testid="stCaptionContainer"] {
@@ -470,6 +466,18 @@ div[data-testid="stButton"] button, div[data-testid="stLinkButton"] a {
     display: none !important;
 }
 
+/* Keep the Streamlit sidebar visible */
+section[data-testid="stSidebar"] {
+    display: block !important;
+    min-width: 250px !important;
+    width: 250px !important;
+    transform: none !important;
+}
+
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
 </style>
 """,
     unsafe_allow_html=True,
