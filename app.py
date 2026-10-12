@@ -210,7 +210,15 @@ section[data-testid="stSidebar"] {
 .gm-login-brand-title { font-size:30px; font-weight:800; color:#17233c; }
 .gm-login-brand-sub { color:#5c4bb5; font-size:18px; font-weight:700; margin-top:7px; }
 .gm-login-brand-line { width:70px; height:3px; background:#6547ed; margin-top:17px; border-radius:3px; }
-.gm-login-heading { font-size:29px; line-height:1.25; color:#17233c; margin:57px 0 13px; }
+
+.gm-login-heading {
+    font-size: 36px;
+    line-height: 1.25;
+    color: #17233c !important;
+    font-weight: 800;
+    margin: 32px 0 16px;
+    letter-spacing: -0.5px;
+}
 .gm-login-description { font-size:16px; line-height:1.7; color:#667085; max-width:650px; margin:0; }
 .gm-login-features { display:grid; grid-template-columns:1fr 1fr; gap:31px 42px; margin-top:43px; }
 .gm-login-feature { display:flex; gap:16px; align-items:flex-start; }
