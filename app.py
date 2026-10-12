@@ -462,6 +462,14 @@ div[data-testid="stButton"] button, div[data-testid="stLinkButton"] a {
     border-radius:10px !important;
     font-weight:700 !important;
 }
+
+
+/* Keep the sidebar expanded by hiding its collapse controls */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
