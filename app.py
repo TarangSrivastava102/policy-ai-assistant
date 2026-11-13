@@ -13,7 +13,8 @@ import calendar
 import json
 import ast
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # Optional Google integrations
 try:
@@ -71,6 +72,9 @@ REIMBURSEMENT_DRIVE_FOLDER_ID = "1Qrozesa14l5UPoCqU-zdVfR0GDNHRTum"
 # Job Referral Portal settings
 JOB_REFERRAL_SHEET_NAME = "Germane Media - Job Referrals"
 JOB_REFERRAL_DRIVE_FOLDER_ID = "1CNwDzA4ujA2n2xV34vbtMjbqyHlYYnee"
+# Attendance module
+ATTENDANCE_SHEET_NAME = "Germane Media - Attendance Management"
+ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
 
 # ============================================================
 # UI
@@ -739,6 +743,306 @@ def save_reimbursement_to_google(submission):
 
 
 # ============================================================
+# ============================================================
+# ATTENDANCE MANAGEMENT
+# ============================================================
+def attendance_now():
+    return datetime.now(ATTENDANCE_TZ)
+
+
+def get_attendance_workbook():
+    """Create/reuse attendance workbook and its three worksheets."""
+    gc, _ = google_clients()
+    try:
+        sh = gc.open(ATTENDANCE_SHEET_NAME)
+    except gspread.SpreadsheetNotFound:
+        sh = gc.create(ATTENDANCE_SHEET_NAME)
+
+    try:
+        sh.share(HR_EMAIL, perm_type="user", role="writer", notify=False)
+    except Exception:
+        pass
+
+    specs = {
+        "Daily Attendance": [
+            "Employee Email", "Employee Name", "Date", "Check In", "Check Out",
+            "Break Start", "Break End", "Status", "Last Updated"
+        ],
+        "Correction Requests": [
+            "Request ID", "Employee Email", "Employee Name", "Attendance Date",
+            "Requested Check In", "Requested Check Out", "Reason", "Status",
+            "Approver Email", "Submitted At", "Decision", "Decided At"
+        ],
+        "Employee Directory": [
+            "Employee Email", "Employee Name", "Manager Email", "Active"
+        ],
+    }
+    worksheets = {}
+    for title, headers in specs.items():
+        try:
+            ws = sh.worksheet(title)
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title=title, rows=2000, cols=max(12, len(headers)))
+        if ws.row_values(1) != headers:
+            ws.update("A1", [headers])
+            try:
+                ws.freeze(rows=1)
+            except Exception:
+                pass
+        worksheets[title] = ws
+    return sh, worksheets["Daily Attendance"], worksheets["Correction Requests"], worksheets["Employee Directory"]
+
+
+def attendance_find_daily_row(ws, employee_email, day_string):
+    rows = ws.get_all_records()
+    target_email = employee_email.strip().lower()
+    for sheet_row, record in enumerate(rows, start=2):
+        if (str(record.get("Employee Email", "")).strip().lower() == target_email
+                and str(record.get("Date", "")).strip() == day_string):
+            return sheet_row, record
+    return None, None
+
+
+def attendance_get_manager(employee_email, directory_ws):
+    """Return the manager email from the HR-maintained Employee Directory."""
+    target = employee_email.strip().lower()
+    for record in directory_ws.get_all_records():
+        if str(record.get("Employee Email", "")).strip().lower() == target:
+            if str(record.get("Active", "Yes")).strip().lower() in ("no", "false", "inactive", "0"):
+                return "", False
+            return str(record.get("Manager Email", "")).strip().lower(), True
+    # If the employee is not yet in the directory, permit attendance but route
+    # corrections to HR until HR adds the employee and reporting manager.
+    return "", True
+
+
+def attendance_duration(check_in, check_out, break_start="", break_end=""):
+    try:
+        start = datetime.strptime(str(check_in), "%H:%M:%S")
+        end = datetime.strptime(str(check_out), "%H:%M:%S")
+    except Exception:
+        try:
+            start = datetime.strptime(str(check_in), "%H:%M")
+            end = datetime.strptime(str(check_out), "%H:%M")
+        except Exception:
+            return "—"
+    minutes = int((end - start).total_seconds() // 60)
+    if minutes < 0:
+        minutes += 24 * 60
+    if break_start and break_end:
+        try:
+            bs = datetime.strptime(str(break_start), "%H:%M:%S")
+        except Exception:
+            bs = datetime.strptime(str(break_start), "%H:%M")
+        try:
+            be = datetime.strptime(str(break_end), "%H:%M:%S")
+        except Exception:
+            be = datetime.strptime(str(break_end), "%H:%M")
+        break_minutes = int((be - bs).total_seconds() // 60)
+        if break_minutes > 0:
+            minutes -= break_minutes
+    if minutes < 0:
+        return "—"
+    return f"{minutes // 60}h {minutes % 60}m"
+
+
+def attendance_update_cell(ws, row_number, header, value):
+    headers = ws.row_values(1)
+    if header in headers:
+        ws.update_cell(row_number, headers.index(header) + 1, value)
+
+
+def attendance_portal():
+    st.markdown(
+        """
+        <div class="portal-hero">
+            <div class="portal-kicker">Employee Self-Service</div>
+            <div class="portal-title">Attendance Management</div>
+            <div class="portal-subtitle">Record your workday, track breaks, view attendance history, and request corrections when needed.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    try:
+        sh, daily_ws, requests_ws, directory_ws = get_attendance_workbook()
+        day = attendance_now().date().isoformat()
+        now_text = attendance_now().strftime("%H:%M:%S")
+        row_number, record = attendance_find_daily_row(daily_ws, st.session_state.emp_email, day)
+    except Exception as e:
+        st.error(f"Unable to connect to the attendance spreadsheet. Please contact HR. Details: {e}")
+        return
+
+    if record is None:
+        record = {}
+
+    check_in = str(record.get("Check In", "")).strip()
+    check_out = str(record.get("Check Out", "")).strip()
+    break_start = str(record.get("Break Start", "")).strip()
+    break_end = str(record.get("Break End", "")).strip()
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f'<div class="info-card"><div class="info-label">Employee</div><div class="info-value">{escape(st.session_state.emp_name)}</div></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'<div class="info-card"><div class="info-label">Today</div><div class="info-value">{escape(day)}</div></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown(f'<div class="info-card"><div class="info-label">Attendance Status</div><div class="info-value">{escape(str(record.get("Status", "Not checked in") or "Not checked in"))}</div></div>', unsafe_allow_html=True)
+
+    st.caption(f"Current India time: {attendance_now().strftime('%d %b %Y, %I:%M:%S %p')}")
+    b1, b2, b3, b4 = st.columns(4)
+    with b1:
+        if st.button("🟢 Check In", use_container_width=True, disabled=bool(check_in)):
+            values = [st.session_state.emp_email, st.session_state.emp_name, day, now_text, "", "", "", "Present", now_text]
+            if row_number:
+                st.error("Today's attendance record already exists. Please refresh and try again.")
+            else:
+                daily_ws.append_row(values, value_input_option="USER_ENTERED")
+                st.success("Check-in recorded.")
+                st.rerun()
+    with b2:
+        break_active = bool(break_start) and not bool(break_end)
+        if st.button("☕ Start Break", use_container_width=True, disabled=not bool(check_in) or bool(check_out) or break_active or bool(break_end)):
+            attendance_update_cell(daily_ws, row_number, "Break Start", now_text)
+            attendance_update_cell(daily_ws, row_number, "Status", "On Break")
+            attendance_update_cell(daily_ws, row_number, "Last Updated", now_text)
+            st.success("Break started.")
+            st.rerun()
+    with b3:
+        if st.button("▶️ End Break", use_container_width=True, disabled=not break_active or bool(check_out)):
+            attendance_update_cell(daily_ws, row_number, "Break End", now_text)
+            attendance_update_cell(daily_ws, row_number, "Status", "Present")
+            attendance_update_cell(daily_ws, row_number, "Last Updated", now_text)
+            st.success("Break ended.")
+            st.rerun()
+    with b4:
+        if st.button("🔴 Check Out", use_container_width=True, disabled=not bool(check_in) or bool(check_out) or break_active):
+            attendance_update_cell(daily_ws, row_number, "Check Out", now_text)
+            attendance_update_cell(daily_ws, row_number, "Status", "Completed")
+            attendance_update_cell(daily_ws, row_number, "Last Updated", now_text)
+            st.success("Check-out recorded.")
+            st.rerun()
+
+    st.markdown("### Today's summary")
+    s1, s2, s3 = st.columns(3)
+    s1.metric("Check In", check_in or "—")
+    s2.metric("Check Out", check_out or "—")
+    s3.metric("Net Working Time", attendance_duration(check_in, check_out, break_start, break_end))
+    if break_start:
+        st.caption(f"Break: {break_start} – {break_end or 'In progress'}")
+    if not check_in:
+        st.info("Select Check In when you begin your workday.")
+    elif not check_out:
+        st.info("Your attendance is in progress. Check out when you finish work.")
+
+    st.markdown("### My attendance history")
+    try:
+        all_rows = daily_ws.get_all_records()
+        mine = [r for r in all_rows if str(r.get("Employee Email", "")).strip().lower() == st.session_state.emp_email]
+        if mine:
+            st.dataframe(mine[::-1][:31], use_container_width=True, hide_index=True)
+        else:
+            st.caption("No attendance history recorded yet.")
+    except Exception as e:
+        st.warning(f"Unable to load attendance history: {e}")
+
+    st.markdown("### Request an attendance correction")
+    with st.form("attendance_correction_form", clear_on_submit=True):
+        correction_date = st.date_input("Attendance date", value=attendance_now().date(), max_value=attendance_now().date())
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            requested_in = st.time_input("Correct check-in time", value=datetime.strptime(check_in[:8], "%H:%M:%S").time() if len(check_in) >= 8 else datetime.strptime("10:00", "%H:%M").time())
+        with rc2:
+            requested_out = st.time_input("Correct check-out time", value=datetime.strptime(check_out[:8], "%H:%M:%S").time() if len(check_out) >= 8 else datetime.strptime("19:00", "%H:%M").time())
+        reason = st.text_area("Reason for correction", placeholder="Explain why the attendance needs to be corrected.")
+        submitted = st.form_submit_button("Submit correction request", use_container_width=True)
+        if submitted:
+            if not reason.strip():
+                st.error("Please provide a reason for the correction.")
+            elif requested_out <= requested_in:
+                st.error("Check-out time must be later than check-in time.")
+            else:
+                manager_email, active = attendance_get_manager(st.session_state.emp_email, directory_ws)
+                if not active:
+                    st.error("Your employee record is marked inactive. Please contact HR.")
+                else:
+                    approver = manager_email if manager_email.endswith("@" + COMPANY_DOMAIN) else HR_EMAIL.lower()
+                    requests_ws.append_row([
+                        uuid.uuid4().hex[:12].upper(), st.session_state.emp_email, st.session_state.emp_name,
+                        correction_date.isoformat(), requested_in.strftime("%H:%M:%S"), requested_out.strftime("%H:%M:%S"),
+                        reason.strip(), "Pending", approver, attendance_now().strftime("%Y-%m-%d %H:%M:%S"), "", ""
+                    ], value_input_option="USER_ENTERED")
+                    st.success(f"Correction request submitted. Approver: {approver}")
+                    st.rerun()
+
+    st.markdown("### Attendance correction approvals")
+    approver_email = st.session_state.emp_email.lower()
+    if st.session_state.is_hr:
+        st.caption("HR can review all pending correction requests.")
+    else:
+        st.caption("This section shows correction requests assigned to you as the employee's reporting manager.")
+    try:
+        request_rows = requests_ws.get_all_records()
+        pending = []
+        for idx, req in enumerate(request_rows, start=2):
+            assigned = str(req.get("Approver Email", "")).strip().lower()
+            status = str(req.get("Status", "")).strip().lower()
+            if status == "pending" and (st.session_state.is_hr or assigned == approver_email):
+                pending.append((idx, req))
+        if not pending:
+            st.caption("No pending correction requests assigned to you.")
+        for sheet_row, req in pending:
+            with st.container(border=True):
+                st.markdown(f"**{req.get('Employee Name', '')}** · {req.get('Employee Email', '')}")
+                st.write(f"Date: {req.get('Attendance Date', '')} | Requested: {req.get('Requested Check In', '')} – {req.get('Requested Check Out', '')}")
+                st.write(f"Reason: {req.get('Reason', '')}")
+                ac1, ac2 = st.columns(2)
+                with ac1:
+                    if st.button("Approve", key=f"att_approve_{req.get('Request ID')}", use_container_width=True):
+                        day_value = str(req.get("Attendance Date", "")).strip()
+                        target_row, target_record = attendance_find_daily_row(daily_ws, str(req.get("Employee Email", "")), day_value)
+                        approved_in = str(req.get("Requested Check In", "")).strip()
+                        approved_out = str(req.get("Requested Check Out", "")).strip()
+                        update_time = attendance_now().strftime("%H:%M:%S")
+                        if target_row:
+                            attendance_update_cell(daily_ws, target_row, "Check In", approved_in)
+                            attendance_update_cell(daily_ws, target_row, "Check Out", approved_out)
+                            attendance_update_cell(daily_ws, target_row, "Status", "Corrected")
+                            attendance_update_cell(daily_ws, target_row, "Last Updated", update_time)
+                        else:
+                            daily_ws.append_row([req.get("Employee Email", ""), req.get("Employee Name", ""), day_value, approved_in, approved_out, "", "", "Corrected", update_time], value_input_option="USER_ENTERED")
+                        attendance_update_cell(requests_ws, sheet_row, "Status", "Approved")
+                        attendance_update_cell(requests_ws, sheet_row, "Decision", f"Approved by {approver_email}")
+                        attendance_update_cell(requests_ws, sheet_row, "Decided At", attendance_now().strftime("%Y-%m-%d %H:%M:%S"))
+                        st.success("Correction approved and attendance updated.")
+                        st.rerun()
+                with ac2:
+                    if st.button("Reject", key=f"att_reject_{req.get('Request ID')}", use_container_width=True):
+                        attendance_update_cell(requests_ws, sheet_row, "Status", "Rejected")
+                        attendance_update_cell(requests_ws, sheet_row, "Decision", f"Rejected by {approver_email}")
+                        attendance_update_cell(requests_ws, sheet_row, "Decided At", attendance_now().strftime("%Y-%m-%d %H:%M:%S"))
+                        st.success("Correction request rejected.")
+                        st.rerun()
+    except Exception as e:
+        st.warning(f"Unable to load correction requests: {e}")
+
+    if st.session_state.is_hr:
+        with st.expander("HR setup: Employee directory", expanded=False):
+            st.markdown(
+                "Add one row per employee in the **Employee Directory** worksheet in the attendance spreadsheet. "
+                "Use company email addresses, set Active to Yes, and enter the reporting manager's company email. "
+                "If Manager Email is blank, correction requests go to HR."
+            )
+            st.code(sh.url, language=None)
+            try:
+                directory_rows = directory_ws.get_all_records()
+                if directory_rows:
+                    st.dataframe(directory_rows, use_container_width=True, hide_index=True)
+                else:
+                    st.info("The directory is empty. Add employees and reporting-manager emails to the Employee Directory worksheet.")
+            except Exception:
+                pass
+
 # EMAIL
 # ============================================================
 def smtp_is_configured():
@@ -1940,7 +2244,11 @@ with st.sidebar:
     if st.button("👥 Job Referral Portal", use_container_width=True):
         st.session_state.current_page = "Job Referral"
         st.rerun()
-
+        
+    if st.button("🕒 Attendance Management", use_container_width=True):
+        st.session_state.current_page = "Attendance"
+        st.rerun()
+    
     st.divider()
     
 
@@ -1964,6 +2272,13 @@ if st.session_state.current_page == "Reimbursement":
 # ============================================================
 if st.session_state.current_page == "Job Referral":
     job_referral_portal()
+    st.stop()
+
+# ============================================================
+# ATTENDANCE PAGE
+# ============================================================
+if st.session_state.current_page == "Attendance":
+    attendance_portal()
     st.stop()
 
 # ============================================================
