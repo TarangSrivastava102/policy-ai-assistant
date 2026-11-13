@@ -750,13 +750,15 @@ def attendance_now():
     return datetime.now(ATTENDANCE_TZ)
 
 
+
 def get_attendance_workbook():
-    """Create/reuse attendance workbook and its three worksheets."""
+    """Open the existing attendance workbook and prepare its worksheets."""
     gc, _ = google_clients()
-    try:
-        sh = gc.open(ATTENDANCE_SHEET_NAME)
-    except gspread.SpreadsheetNotFound:
-        sh = gc.create(ATTENDANCE_SHEET_NAME)
+
+    # Open the spreadsheet using its fixed Google Sheets ID.
+    sh = gc.open_by_key(
+        "1OfTbAYd2GczY5frwDLUPrBOaB1EfXoguhEdK6d5v2jA"
+    )
 
     try:
         sh.share(HR_EMAIL, perm_type="user", role="writer", notify=False)
@@ -765,32 +767,50 @@ def get_attendance_workbook():
 
     specs = {
         "Daily Attendance": [
-            "Employee Email", "Employee Name", "Date", "Check In", "Check Out",
-            "Break Start", "Break End", "Status", "Last Updated"
+            "Employee Email", "Employee Name", "Date", "Check In",
+            "Check Out", "Break Start", "Break End", "Status",
+            "Last Updated"
         ],
         "Correction Requests": [
-            "Request ID", "Employee Email", "Employee Name", "Attendance Date",
-            "Requested Check In", "Requested Check Out", "Reason", "Status",
+            "Request ID", "Employee Email", "Employee Name",
+            "Attendance Date", "Requested Check In",
+            "Requested Check Out", "Reason", "Status",
             "Approver Email", "Submitted At", "Decision", "Decided At"
         ],
         "Employee Directory": [
             "Employee Email", "Employee Name", "Manager Email", "Active"
         ],
     }
+
     worksheets = {}
+
     for title, headers in specs.items():
         try:
             ws = sh.worksheet(title)
         except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=title, rows=2000, cols=max(12, len(headers)))
+            ws = sh.add_worksheet(
+                title=title,
+                rows=2000,
+                cols=max(12, len(headers))
+            )
+
         if ws.row_values(1) != headers:
             ws.update("A1", [headers])
-            try:
-                ws.freeze(rows=1)
-            except Exception:
-                pass
+
+        try:
+            ws.freeze(rows=1)
+        except Exception:
+            pass
+
         worksheets[title] = ws
-    return sh, worksheets["Daily Attendance"], worksheets["Correction Requests"], worksheets["Employee Directory"]
+
+    return (
+        sh,
+        worksheets["Daily Attendance"],
+        worksheets["Correction Requests"],
+        worksheets["Employee Directory"]
+    )
+
 
 
 def attendance_find_daily_row(ws, employee_email, day_string):
